@@ -58,8 +58,8 @@ class Chain:
     payload_len: int = 8 * 100  # Number of bits per packet
 
     # Simulation parameters
-    n_packets: int = 500  # Number of sent packets
-
+    n_packets: int = 800  # Number of sent packets
+    
     # Channel parameters
     sto_val: float = 0
     sto_range: float = 10 / BIT_RATE  # defines the delay range when random
@@ -217,7 +217,7 @@ class BasicChain(Chain):
 
         return None
 
-    ideal_cfo_estimation = False
+    ideal_cfo_estimation = True
 
     def cfo_estimation(self, y):
         """Estimates CFO using Moose algorithm, on first samples of preamble."""
@@ -240,27 +240,28 @@ class BasicChain(Chain):
 
         return float(cfo_est)
 
-    ideal_sto_estimation = True
+    ideal_sto_estimation = False
 
     def sto_estimation(self, y):
-        """Estimates symbol timing (fractional) based on phase shifts."""
+        """Estimates symbol timing (fractional) using cross-correlation with the preamble."""
         R = self.osr_rx
 
-        # Computation of derivatives of phase function
-        phase_function = np.unwrap(np.angle(y))
-        phase_derivative_1 = phase_function[1:] - phase_function[:-1]
-        phase_derivative_2 = np.abs(phase_derivative_1[1:] - phase_derivative_1[:-1])
+        # 1. Génération du signal de référence local
+        # self.modulate utilise osr_tx (64), on prend 1 échantillon sur (osr_tx/osr_rx) = 8
+        # pour redescendre à la fréquence de réception.
+        tx_ref = self.modulate(self.preamble)
+        rx_ref = tx_ref[:: self.osr_tx // R]
 
-        sum_der_saved = -np.inf
-        save_i = 0
-        for i in range(0, R):
-            sum_der = np.sum(phase_derivative_2[i::R])  # Sum every R samples
+        # 2. Corrélation complexe entre le signal reçu et la référence
+        # On calcule l'amplitude (abs) pour trouver le pic d'énergie maximale
+        corr_mag = np.abs(np.correlate(y, rx_ref, mode='valid'))
 
-            if sum_der > sum_der_saved:
-                sum_der_saved = sum_der
-                save_i = i
+        # 3. Trouver l'indice global où les signaux sont parfaitement alignés
+        peak_idx = np.argmax(corr_mag)
 
-        return np.mod(save_i + 1, R)
+        # 4. Extraire la partie fractionnaire (le STO)
+        # Le délai total est k*R + d. En faisant modulo R, on isole 'd' (entre 0 et R-1).
+        return np.mod(peak_idx, R)
 
     def demodulate(self, y):
         """Non-coherent demodulator."""

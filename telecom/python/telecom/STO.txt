@@ -1,0 +1,120 @@
+### DOUBLE DERIVATIVE ###
+
+def sto_estimation(self, y):
+        "Estimates symbol timing (fractional) based on phase shifts."
+        R = self.osr_rx
+
+        # Computation of derivatives of phase function
+        phase_function = np.unwrap(np.angle(y))
+        phase_derivative_1 = phase_function[1:] - phase_function[:-1]
+        phase_derivative_2 = np.abs(phase_derivative_1[1:] - phase_derivative_1[:-1])
+
+        sum_der_saved = -np.inf
+        save_i = 0
+        for i in range(0, R):
+            sum_der = np.sum(phase_derivative_2[i::R])  # Sum every R samples
+
+            if sum_der > sum_der_saved:
+                sum_der_saved = sum_der
+                save_i = i
+
+        return np.mod(save_i + 1, R)
+
+### CORRELATION ###
+
+def sto_estimation(self, y):
+        """Estimates symbol timing (fractional) using cross-correlation with the preamble."""
+        R = self.osr_rx
+
+        # 1. Génération du signal de référence local
+        # self.modulate utilise osr_tx (64), on prend 1 échantillon sur (osr_tx/osr_rx) = 8
+        # pour redescendre à la fréquence de réception.
+        tx_ref = self.modulate(self.preamble)
+        rx_ref = tx_ref[:: self.osr_tx // R]
+
+        # 2. Corrélation complexe entre le signal reçu et la référence
+        # On calcule l'amplitude (abs) pour trouver le pic d'énergie maximale
+        corr_mag = np.abs(np.correlate(y, rx_ref, mode='valid'))
+
+        # 3. Trouver l'indice global où les signaux sont parfaitement alignés
+        peak_idx = np.argmax(corr_mag)
+
+        # 4. Extraire la partie fractionnaire (le STO)
+        # Le délai total est k*R + d. En faisant modulo R, on isole 'd' (entre 0 et R-1).
+        return np.mod(peak_idx, R)
+
+### MAXIMUM LIKELIHOOD ###
+
+def sto_estimation(self, y):
+        """Estimates STO using Non-Data-Aided Maximum Likelihood (NDA-ML)."""
+        R = self.osr_rx
+        B = self.bit_rate
+        T = 1.0 / B
+        fd = self.freq_dev
+
+        # 1. Formes d'ondes de référence (comme dans le démodulateur)
+        n = np.arange(R)
+        ref1 = np.exp(-1j * 2 * np.pi * fd * n * T / R)
+        ref0 = np.exp(+1j * 2 * np.pi * fd * n * T / R)
+
+        nb_syms = len(y) // R
+        energies = np.zeros(R)
+
+        # 2. On teste les R décalages temporels possibles
+        for i in range(R):
+            # Découpage du signal avec le décalage 'i'
+            y_shifted = y[i : i + (nb_syms - 1) * R]
+            y_matrix = np.reshape(y_shifted, (nb_syms - 1, R))
+
+            # Corrélation non-cohérente avec les deux fréquences
+            r1 = np.sum(y_matrix * ref1, axis=1) / R
+            r0 = np.sum(y_matrix * ref0, axis=1) / R
+
+            # 3. La métrique ML est la somme des énergies au carré
+            energies[i] = np.sum(np.abs(r1)**2 + np.abs(r0)**2)
+
+        # Le STO est l'indice qui capture le maximum d'énergie
+        return int(np.argmax(energies))
+
+
+### ARTICLE ### 
+
+def sto_estimation(self, y):
+        """
+        Estimates STO using an algorithm inspired by Caire & Elia (1997).
+        Joint Time/Frequency feedforward estimation without noise*noise products.
+        """
+        R = self.osr_rx
+        B = self.bit_rate
+        T = 1.0 / B
+        fd = self.freq_dev
+
+        # Formes d'ondes de référence pour le filtrage linéaire (les 2 fréquences FSK)
+        n = np.arange(R)
+        ref1 = np.exp(-1j * 2 * np.pi * fd * n * T / R)
+        ref0 = np.exp(+1j * 2 * np.pi * fd * n * T / R)
+
+        nb_syms = len(y) // R
+        timing_metrics = np.zeros(R)
+
+        # Banc de filtres polyphasés : on évalue chaque timing offset possible
+        for i in range(R):
+            # Découpage du signal pour ce timing 'i'
+            y_shifted = y[i : i + (nb_syms - 1) * R]
+            y_matrix = np.reshape(y_shifted, (nb_syms - 1, R))
+
+            # Filtrage linéaire (Projection sur les fréquences attendues)
+            # C'est l'équivalent du "bank of FFT processors" de l'article pour M=2
+            r1 = np.sum(y_matrix * ref1, axis=1)
+            r0 = np.sum(y_matrix * ref0, axis=1)
+
+            # Évaluation de la métrique SANS produit bruit*bruit préalable.
+            # On prend le maximum de corrélation linéaire absolue pour chaque symbole, 
+            # puis on somme sur tout le bloc d'observation.
+            metric = np.sum(np.maximum(np.abs(r1), np.abs(r0)))
+            
+            timing_metrics[i] = metric
+
+        # Le STO optimal est celui qui maximise la métrique d'énergie linéaire
+        return int(np.argmax(timing_metrics))
+
