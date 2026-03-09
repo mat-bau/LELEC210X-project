@@ -31,7 +31,7 @@ def cfo_estimation(y, B, R, Fdev):
     """Estimates CFO using Moose algorithm, on first samples of preamble."""
     # TO DO: extract 2 blocks of size N*R at the start of y
     T = 1.0 / B               # symbol period
-    N = 4                     # number of CPFSK symbols per block (can be changed)
+    N = 1                     # number of CPFSK symbols per block (can be changed)
     Nt = N * R                # number of samples per block
 
     # Ensure signal is long enough
@@ -57,25 +57,41 @@ def cfo_estimation(y, B, R, Fdev):
     return float(cfo_est)
 
 
+
 def sto_estimation(y, B, R, Fdev):
     """
-    Estimate symbol timing (fractional) based on phase shifts
+    Estimates symbol timing (fractional) using cross-correlation with the preamble
     """
-    phase_function = np.unwrap(np.angle(y))
-    phase_derivative_sign = phase_function[1:] - phase_function[:-1]
-    sign_derivative = np.abs(phase_derivative_sign[1:] - phase_derivative_sign[:-1])
 
-    sum_der_saved = -np.inf
-    save_i = 0
+    # préambule fixe : 0xAAAAAAAA = 10101010...
+    preamble_bits = np.tile([1,0], 16)   # 32 bits
 
-    for i in range(0, R):
-        sum_der = np.sum(sign_derivative[i::R])
+    # paramètres CPFSK
+    h = 2 * Fdev / B
 
-        if sum_der > sum_der_saved:
-            sum_der_saved = sum_der
-            save_i = i
+    # modulation de référence avec oversampling R
+    x = np.zeros(len(preamble_bits) * R, dtype=np.complex64)
+    ph = 2 * np.pi * Fdev * (np.arange(R) / R) / B
 
-    return np.mod(save_i + 1, R)
+    phase_shift = 0
+
+    for i, b in enumerate(preamble_bits):
+
+        symbol = 1 if b else -1
+
+        x[i*R:(i+1)*R] = np.exp(1j*phase_shift) * np.exp(1j*symbol*ph)
+
+        phase_shift += h*np.pi*symbol
+
+    rx_ref = x
+
+    # corrélation
+    corr_mag = np.abs(np.correlate(y, rx_ref, mode="valid"))
+
+    peak_idx = np.argmax(corr_mag)
+
+    # STO fractionnaire
+    return peak_idx % R
 
 
 
