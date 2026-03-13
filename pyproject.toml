@@ -26,8 +26,17 @@ readme = "README.md"
 requires-python = "==3.10.*"
 version = "0.1.0"
 dependencies = [
+    "librosa>=0.11.0",
+    "matplotlib>=3.10.6",
+    "pyserial>=3.5",
     "pyzmq>=27.1.0",
     "requests>=2.32.5",
+    "scikit-learn>=1.7.2",
+    "scipy>=1.15.3",
+    "soundfile>=0.13.1",
+    "tensorflow>=2.16",
+    "tf-keras>=2.20.1",
+    "wandb>=0.25.1",
 ]
 
 [tool.ruff]
