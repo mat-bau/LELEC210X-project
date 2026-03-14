@@ -1,0 +1,123 @@
+_wandb:
+    value:
+        cli_version: 0.25.1
+        e:
+            dh5z1zqexsaaejnc0ft9u267hqdgqyah:
+                codePath: /home/guillaume/LELEC210X-project/classification/tryingClassifier.ipynb
+                codePathLocal: tryingClassifier.ipynb
+                cpu_count: 4
+                cpu_count_logical: 8
+                disk:
+                    /:
+                        total: "104719130624"
+                        used: "42508251136"
+                email: guillaume.keus@student.uclouvain.be
+                executable: /home/guillaume/LELEC210X-project/.venv/bin/python
+                git:
+                    commit: 9c07c44c53879b0ba246924d21073c0228e883f4
+                    remote: https://github.com/mat-bau/LELEC210X-project.git
+                host: guillaume-Aspire
+                memory:
+                    total: "8094064640"
+                os: Linux-6.8.0-101-generic-x86_64-with-glibc2.35
+                program: /home/guillaume/LELEC210X-project/classification/tryingClassifier.ipynb
+                python: CPython 3.10.12
+                root: /home/guillaume/LELEC210X-project/classification
+                startedAt: "2026-03-14T15:58:41.669602Z"
+                writerId: dh5z1zqexsaaejnc0ft9u267hqdgqyah
+        m:
+            - "1": epoch/epoch
+              "6":
+                - 3
+              "7": []
+            - "2": epoch/*
+              "5": 1
+              "6":
+                - 1
+              "7": []
+        python_version: 3.10.12
+        t:
+            "1":
+                - 2
+                - 3
+                - 5
+                - 53
+            "2":
+                - 2
+                - 3
+                - 5
+                - 53
+            "3":
+                - 2
+                - 7
+                - 13
+                - 15
+                - 16
+                - 38
+            "4": 3.10.12
+            "5": 0.25.1
+            "8":
+                - 1
+            "12": 0.25.1
+            "13": linux-x86_64
+        visualize:
+            confusion_matrix:
+                panel_config:
+                    fieldSettings:
+                        Actual: Actual
+                        Predicted: Predicted
+                        nPredictions: nPredictions
+                    panelDefId: wandb/confusion_matrix/v1
+                    stringSettings:
+                        title: Confusion Matrix Curve
+                    transform:
+                        name: tableWithLeafColNames
+                    userQuery:
+                        queryFields:
+                            - args:
+                                - name: runSets
+                                  value: ${runSets}
+                              fields:
+                                - fields: []
+                                  name: id
+                                - fields: []
+                                  name: name
+                                - fields: []
+                                  name: _defaultColorIndex
+                                - args:
+                                    - name: tableKey
+                                      value: confusion_matrix_table
+                                  fields: []
+                                  name: summaryTable
+                              name: runSets
+                panel_type: Vega2
+batch_size:
+    value: 32
+dropout:
+    value: 0.5
+duration_ms:
+    value: 1000
+early_stop:
+    value: 60
+epochs:
+    value: 300
+extra_aug_passes:
+    value: 60
+hop_length:
+    value: 128
+l2_reg:
+    value: 0.0001
+label_smooth:
+    value: 0.1
+learning_rate:
+    value: 0.0005
+mixup_alpha:
+    value: 0.3
+n_fft:
+    value: 512
+n_mel:
+    value: 64
+sample_rate:
+    value: 11025
+use_real_val:
+    value: true

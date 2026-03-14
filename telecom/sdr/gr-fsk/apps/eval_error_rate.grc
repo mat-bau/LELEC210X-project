@@ -171,7 +171,7 @@ blocks:
   id: variable
   parameters:
     comment: ''
-    value: 868e6
+    value: 872e6
   states:
     bus_sink: false
     bus_source: false
@@ -207,7 +207,7 @@ blocks:
   id: variable
   parameters:
     comment: ''
-    value: data_rate/4
+    value: data_rate/2
   states:
     bus_sink: false
     bus_source: false
@@ -276,7 +276,7 @@ blocks:
   id: variable
   parameters:
     comment: ''
-    value: '100'
+    value: '800'
   states:
     bus_sink: false
     bus_source: false
@@ -308,7 +308,7 @@ blocks:
     start: '0'
     step: '1'
     stop: '73'
-    value: '10'
+    value: '53'
     widget: counter_slider
   states:
     bus_sink: false
