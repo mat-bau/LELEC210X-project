@@ -1,0 +1,28 @@
+{
+  "os": "Linux-6.8.0-101-generic-x86_64-with-glibc2.35",
+  "python": "CPython 3.10.12",
+  "startedAt": "2026-03-14T19:28:58.522500Z",
+  "program": "/home/guillaume/LELEC210X-project/classification/tryingClassifier.ipynb",
+  "codePath": "/home/guillaume/LELEC210X-project/classification/tryingClassifier.ipynb",
+  "codePathLocal": "tryingClassifier.ipynb",
+  "git": {
+    "remote": "https://github.com/mat-bau/LELEC210X-project.git",
+    "commit": "9c07c44c53879b0ba246924d21073c0228e883f4"
+  },
+  "email": "guillaume.keus@student.uclouvain.be",
+  "root": "/home/guillaume/LELEC210X-project/classification",
+  "host": "guillaume-Aspire",
+  "executable": "/home/guillaume/LELEC210X-project/.venv/bin/python",
+  "cpu_count": 4,
+  "cpu_count_logical": 8,
+  "disk": {
+    "/": {
+      "total": "104719130624",
+      "used": "42622451712"
+    }
+  },
+  "memory": {
+    "total": "8094064640"
+  },
+  "writerId": "q6is9cbdu1bn7v6cenpe5e4awdsexgkc"
+}
