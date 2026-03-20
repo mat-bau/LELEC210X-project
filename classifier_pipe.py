@@ -1,4 +1,5 @@
-#GROUP_KEY = "dhhnIfhwZxTJCv7135lIm3zFtr96r3H3_xtKXRxU"import sys
+#GROUP_KEY = "dhhnIfhwZxTJCv7135lIm3zFtr96r3H3_xtKXRxU"
+import sys
 import pickle
 import numpy as np
 import requests
@@ -13,11 +14,11 @@ import keras
 Usage : uv run auth --tcp-address tcp://127.0.0.1:10000 --no-authenticate | uv run python classifier_pipe.py
 """
 
-HOSTNAME  = "http://localhost:5001"
-GROUP_KEY = "HEwRwpUXlF3aTkpQusc4bMa30NCxhqWnHnjuPu05"
-#GROUP_KEY = "dhhnIfhwZxTJCv7135lIm3zFtr96r3H3_xtKXRxU"
-MODEL_PATH    = "classification/data/models/models_resnet/valacc9306_test85/best_model_valacc9306_test85.keras"
-METADATA_PATH = "classification/data/models/models_resnet/valacc9306_test85/model_config.pkl"
+HOSTNAME  = "http://lelec210x.sipr.ucl.ac.be/lelec210x"
+#GROUP_KEY = "HEwRwpUXlF3aTkpQusc4bMa30NCxhqWnHnjuPu05"
+GROUP_KEY = "dhhnIfhwZxTJCv7135lIm3zFtr96r3H3_xtKXRxU"
+MODEL_PATH    = "classification/data/models/models_resnet/valacc8423_test8938_nodataaug/best_model.keras"
+METADATA_PATH = "classification/data/models/models_resnet/valacc8423_test8938_nodataaug/model_config.pkl"
 PRINT_PREFIX  = "DF:HEX:"
 GUESS_FILE    = "/tmp/latest_guess.json"
 
@@ -50,7 +51,10 @@ N_FFT       = metadata.get("n_fft",       512)
 HOP_LENGTH  = metadata.get("hop_length",  128)
 SAMPLE_RATE = metadata.get("sample_rate", 11025)
 input_shape = metadata.get("input_shape", (N_MELS, 87, 1))
-
+# Dimensions du spectrogramme envoye par le MCU via GNU Radio
+# A ajuster si tu changes n_melvecs ou melvec_length dans GNU Radio
+n_melvecs    = 64   # nombre de frames temporelles (variable GNU Radio)
+melvec_length = 20  # nombre de bandes mel par frame (variable GNU Radio)
 if len(input_shape) == 3:
     N_FRAMES = input_shape[1]
 elif len(input_shape) == 2:
@@ -149,6 +153,8 @@ def save_guess_to_file(guess, probabilities):
 # --- Traitement d'une ligne UART ---
 def process_line(line):
     line = line.strip()
+    if line:  # affiche toute ligne non vide pour voir ce qui arrive
+        print(f"[DEBUG] recu : {line[:60]}...", file=sys.stderr)
     if not line.startswith(PRINT_PREFIX):
         return
 
@@ -157,6 +163,29 @@ def process_line(line):
         raw_bytes = bytes.fromhex(hex_payload)
         data = np.frombuffer(raw_bytes, dtype=np.dtype('<u2'))
 
+        expected_len = n_melvecs * melvec_length  # 64 * 20 = 1280
+        print(f"  Taille recue : {len(data)} valeurs (attendu {expected_len})", file=sys.stderr)
+
+        if len(data) != expected_len:
+            print(f"  ! Taille incorrecte : {len(data)} != {expected_len}", file=sys.stderr)
+            return
+
+        # Les donnees du MCU arrivent sous forme (n_melvecs, melvec_length)
+        # = (64 frames temporelles, 20 bandes mel)
+        # On transpose en (melvec_length, n_melvecs) = (freq, time) 
+        # pour avoir le meme format que le mel-spectrogramme entraine
+        mel = data.astype(np.float32).reshape(n_melvecs, melvec_length).T
+        # mel shape : (20, 64) = (freq_bins, time_frames)
+
+        # Normalisation identique a FeatureExtractor
+        mel = (mel - mel.mean(axis=1, keepdims=True)) / \
+              (mel.std(axis=1, keepdims=True) + 1e-8)
+
+        # Zoom vers (N_MEL, N_FRAMES) attendu par le ResNet = (64, 87)
+        if mel.shape != (N_MELS, N_FRAMES):
+            zoom    = [N_MELS / mel.shape[0], N_FRAMES / mel.shape[1]]
+            mel     = scipy.ndimage.zoom(mel, zoom, order=1)
+        mel = mel[:N_MELS, :N_FRAMES]
         tensor        = raw_to_mel_features(data)
         probabilities = model.predict(tensor, verbose=0)[0]
         pred_idx      = np.argmax(probabilities)
