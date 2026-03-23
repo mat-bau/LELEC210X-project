@@ -1,0 +1,17 @@
+{
+  "os": "macOS-26.3-arm64-arm-64bit",
+  "python": "CPython 3.10.20",
+  "startedAt": "2026-03-21T21:39:36.770984Z",
+  "program": "/Users/marcbauvir/Matéo/Cours/LELEC210X-project/classification/tryingClassifierMacSetup.ipynb",
+  "codePath": "/Users/marcbauvir/Matéo/Cours/LELEC210X-project/classification/tryingClassifierMacSetup.ipynb",
+  "codePathLocal": "tryingClassifierMacSetup.ipynb",
+  "git": {
+    "remote": "https://github.com/mat-bau/LELEC210X-project.git",
+    "commit": "4f4f0978e8e300d1735f48b2897b1ff323362a89"
+  },
+  "email": "bauvir.mateo@gmail.com",
+  "root": "/Users/marcbauvir/Matéo/Cours/LELEC210X-project/classification",
+  "host": "MacStudio-de-Marc.local",
+  "executable": "/Users/marcbauvir/Matéo/Cours/LELEC210X-project/.venv/bin/python",
+  "writerId": "c9xrjk32uv6ua1qpq4fogb4rg583e65k"
+}

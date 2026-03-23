@@ -1,0 +1,86 @@
+_wandb:
+    value:
+        cli_version: 0.25.1
+        e:
+            wsfw5wo42uuuvl9jv4da3a4izfrtzxib:
+                apple: {}
+                codePath: /Users/marcbauvir/Matéo/Cours/LELEC210X-project/classification/tryingClassifierMacSetup.ipynb
+                codePathLocal: tryingClassifierMacSetup.ipynb
+                cpu_count: 16
+                cpu_count_logical: 16
+                disk:
+                    /:
+                        total: "994662584320"
+                        used: "208573620224"
+                email: bauvir.mateo@gmail.com
+                executable: /Users/marcbauvir/Matéo/Cours/LELEC210X-project/.venv/bin/python
+                git:
+                    commit: 4f4f0978e8e300d1735f48b2897b1ff323362a89
+                    remote: https://github.com/mat-bau/LELEC210X-project.git
+                host: MacStudio-de-Marc.local
+                memory:
+                    total: "137438953472"
+                os: macOS-26.3.1-arm64-arm-64bit
+                program: /Users/marcbauvir/Matéo/Cours/LELEC210X-project/classification/tryingClassifierMacSetup.ipynb
+                python: CPython 3.10.20
+                root: /Users/marcbauvir/Matéo/Cours/LELEC210X-project/classification
+                startedAt: "2026-03-22T09:00:25.248178Z"
+                writerId: wsfw5wo42uuuvl9jv4da3a4izfrtzxib
+        m: []
+        python_version: 3.10.20
+        t:
+            "1":
+                - 2
+                - 3
+                - 5
+                - 53
+            "2":
+                - 2
+                - 3
+                - 5
+                - 53
+            "3":
+                - 2
+                - 13
+                - 15
+                - 16
+            "4": 3.10.20
+            "5": 0.25.1
+            "8":
+                - 1
+            "12": 0.25.1
+            "13": darwin-arm64
+batch_size:
+    value: 256
+dropout:
+    value: 0.4
+duration_ms:
+    value: 1000
+early_stop:
+    value: 60
+epochs:
+    value: 300
+extra_aug_passes:
+    value: 60
+hop_length:
+    value: 128
+l2_reg:
+    value: 0.0001
+label_smooth:
+    value: 0.1
+learning_rate:
+    value: 0.0004
+mixup_alpha:
+    value: 0.3
+n_fft:
+    value: 512
+n_mel:
+    value: 64
+reduce_lr_factor:
+    value: 0.5
+reduce_lr_patience:
+    value: 10
+reduce_lr_plateau:
+    value: true
+sample_rate:
+    value: 11025

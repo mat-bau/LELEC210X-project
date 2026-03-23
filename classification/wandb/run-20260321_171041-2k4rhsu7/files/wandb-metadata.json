@@ -1,0 +1,36 @@
+{
+  "os": "macOS-26.3-arm64-arm-64bit",
+  "python": "CPython 3.10.20",
+  "startedAt": "2026-03-21T16:10:41.965189Z",
+  "program": "/Users/marcbauvir/Matéo/Cours/LELEC210X-project/classification/tryingClassifier.ipynb",
+  "codePath": "/Users/marcbauvir/Matéo/Cours/LELEC210X-project/classification/tryingClassifier.ipynb",
+  "codePathLocal": "tryingClassifier.ipynb",
+  "git": {
+    "remote": "https://github.com/mat-bau/LELEC210X-project.git",
+    "commit": "4f4f0978e8e300d1735f48b2897b1ff323362a89"
+  },
+  "email": "bauvir.mateo@gmail.com",
+  "root": "/Users/marcbauvir/Matéo/Cours/LELEC210X-project/classification",
+  "host": "MacStudio-de-Marc.local",
+  "executable": "/Users/marcbauvir/Matéo/Cours/LELEC210X-project/.venv/bin/python",
+  "cpu_count": 16,
+  "cpu_count_logical": 16,
+  "disk": {
+    "/": {
+      "total": "994662584320",
+      "used": "218387451904"
+    }
+  },
+  "memory": {
+    "total": "137438953472"
+  },
+  "apple": {
+    "name": "Apple M4 Max",
+    "ecpuCores": 4,
+    "pcpuCores": 12,
+    "gpuCores": 40,
+    "memoryGb": 128,
+    "ramTotalBytes": "137438953472"
+  },
+  "writerId": "vsfzpnwuc6vjf6rqdh41h42kt26olsut"
+}

@@ -1,0 +1,188 @@
+_wandb:
+    value:
+        cli_version: 0.25.1
+        e:
+            zm9boh58u0m56c8s8i273zdzqjfjmm90:
+                apple: {}
+                codePath: /Users/marcbauvir/Matéo/Cours/LELEC210X-project/classification/tryingClassifierMacSetup.ipynb
+                codePathLocal: tryingClassifierMacSetup.ipynb
+                cpu_count: 16
+                cpu_count_logical: 16
+                disk:
+                    /:
+                        total: "994662584320"
+                        used: "208503037952"
+                email: bauvir.mateo@gmail.com
+                executable: /Users/marcbauvir/Matéo/Cours/LELEC210X-project/.venv/bin/python
+                git:
+                    commit: 4f4f0978e8e300d1735f48b2897b1ff323362a89
+                    remote: https://github.com/mat-bau/LELEC210X-project.git
+                host: MacStudiodeMarc
+                memory:
+                    total: "137438953472"
+                os: macOS-26.3.1-arm64-arm-64bit
+                program: /Users/marcbauvir/Matéo/Cours/LELEC210X-project/classification/tryingClassifierMacSetup.ipynb
+                python: CPython 3.10.20
+                root: /Users/marcbauvir/Matéo/Cours/LELEC210X-project/classification
+                startedAt: "2026-03-22T12:35:31.928472Z"
+                writerId: zm9boh58u0m56c8s8i273zdzqjfjmm90
+        m:
+            - "1": epoch/epoch
+              "6":
+                - 3
+              "7": []
+            - "2": epoch/*
+              "5": 1
+              "6":
+                - 1
+              "7": []
+        python_version: 3.10.20
+        t:
+            "1":
+                - 2
+                - 3
+                - 5
+                - 53
+            "2":
+                - 2
+                - 3
+                - 5
+                - 53
+            "3":
+                - 2
+                - 7
+                - 13
+                - 15
+                - 16
+                - 38
+            "4": 3.10.20
+            "5": 0.25.1
+            "8":
+                - 1
+            "12": 0.25.1
+            "13": darwin-arm64
+        visualize:
+            confusion_matrix/test:
+                panel_config:
+                    fieldSettings:
+                        Actual: Actual
+                        Predicted: Predicted
+                        nPredictions: nPredictions
+                    panelDefId: wandb/confusion_matrix/v1
+                    stringSettings:
+                        title: Confusion — test
+                    transform:
+                        name: tableWithLeafColNames
+                    userQuery:
+                        queryFields:
+                            - args:
+                                - name: runSets
+                                  value: ${runSets}
+                              fields:
+                                - fields: []
+                                  name: id
+                                - fields: []
+                                  name: name
+                                - fields: []
+                                  name: _defaultColorIndex
+                                - args:
+                                    - name: tableKey
+                                      value: confusion_matrix/test_table
+                                  fields: []
+                                  name: summaryTable
+                              name: runSets
+                panel_type: Vega2
+            confusion_matrix/train:
+                panel_config:
+                    fieldSettings:
+                        Actual: Actual
+                        Predicted: Predicted
+                        nPredictions: nPredictions
+                    panelDefId: wandb/confusion_matrix/v1
+                    stringSettings:
+                        title: Confusion — train
+                    transform:
+                        name: tableWithLeafColNames
+                    userQuery:
+                        queryFields:
+                            - args:
+                                - name: runSets
+                                  value: ${runSets}
+                              fields:
+                                - fields: []
+                                  name: id
+                                - fields: []
+                                  name: name
+                                - fields: []
+                                  name: _defaultColorIndex
+                                - args:
+                                    - name: tableKey
+                                      value: confusion_matrix/train_table
+                                  fields: []
+                                  name: summaryTable
+                              name: runSets
+                panel_type: Vega2
+            confusion_matrix/val:
+                panel_config:
+                    fieldSettings:
+                        Actual: Actual
+                        Predicted: Predicted
+                        nPredictions: nPredictions
+                    panelDefId: wandb/confusion_matrix/v1
+                    stringSettings:
+                        title: Confusion — val
+                    transform:
+                        name: tableWithLeafColNames
+                    userQuery:
+                        queryFields:
+                            - args:
+                                - name: runSets
+                                  value: ${runSets}
+                              fields:
+                                - fields: []
+                                  name: id
+                                - fields: []
+                                  name: name
+                                - fields: []
+                                  name: _defaultColorIndex
+                                - args:
+                                    - name: tableKey
+                                      value: confusion_matrix/val_table
+                                  fields: []
+                                  name: summaryTable
+                              name: runSets
+                panel_type: Vega2
+batch_size:
+    value: 256
+dropout:
+    value: 0.4
+duration_ms:
+    value: 1000
+early_stop:
+    value: 60
+epochs:
+    value: 300
+extra_aug_passes:
+    value: 60
+hop_length:
+    value: 128
+l2_reg:
+    value: 0.0001
+label_smooth:
+    value: 0.1
+learning_rate:
+    value: 0.0004
+mixup_alpha:
+    value: 0.3
+n_fft:
+    value: 512
+n_mel:
+    value: 64
+reduce_lr_factor:
+    value: 0.5
+reduce_lr_patience:
+    value: 10
+reduce_lr_plateau:
+    value: true
+sample_rate:
+    value: 11025
