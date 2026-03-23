@@ -34,32 +34,16 @@ dependencies = [
     "scikit-learn>=1.7.2",
     "scipy>=1.15.3",
     "soundfile>=0.13.1",
-    "tensorflow>=2.16",
-    "tf-keras>=2.20.1",
+    "tensorflow==2.18.1",
+    "tensorflow-metal==1.2.0",
+    "tf-keras==2.18.0",
     "wandb>=0.25.1",
 ]
 
-[tool.ruff]
-extend-exclude = ["**/doxygen/**/*.py", "telecom/sdr/**/python/**/*.py"]
-line-length = 88
-
-[tool.ruff.lint]
-extend-ignore = [
-  "D100",
-  "D101",
-  "D102",
-  "D103",
-  "D104",
-  "D105",
-  "D106",
-  "D107",
-  "D203",
-  "D205",
-  "D212",
-  "E501",
+[tool.uv]
+override-dependencies = [
+    "numpy>=1.23.5,<2.0.0",
 ]
-extend-select = ["B", "C90", "D", "I", "N", "RUF", "UP", "T"]
-isort = {known-first-party = ["auth", "classification", "common", "contrib", "leaderboard", "telecom"]}
 
 [tool.uv.sources]
 auth = {workspace = true}
@@ -71,3 +55,15 @@ telecom = {workspace = true}
 
 [tool.uv.workspace]
 members = ["auth", "classification", "common", "contrib", "leaderboard", "telecom"]
+
+[tool.ruff]
+extend-exclude = ["**/doxygen/**/*.py", "telecom/sdr/**/python/**/*.py"]
+line-length = 88
+
+[tool.ruff.lint]
+extend-ignore = [
+  "D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107",
+  "D203", "D205", "D212", "E501",
+]
+extend-select = ["B", "C90", "D", "I", "N", "RUF", "UP", "T"]
+isort = {known-first-party = ["auth", "classification", "common", "contrib", "leaderboard", "telecom"]}
