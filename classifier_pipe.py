@@ -1,40 +1,60 @@
-#GROUP_KEY = "dhhnIfhwZxTJCv7135lIm3zFtr96r3H3_xtKXRxU"
+"""
+classifier_pipe.py
+LELEC210X — ResNet Classifier Pipeline (GNU Radio pipe)
+
+Usage:
+    uv run auth --tcp-address tcp://127.0.0.1:10000 --no-authenticate \
+    | uv run python classifier_pipe.py
+
+Principe :
+    Le MCU calcule et envoie un mel-spectrogramme PRÉ-CALCULÉ de taille
+    (n_melvecs, melvec_length) — ex: (64, 20) ou (32, 20).
+    Ce script le reçoit, le redimensionne automatiquement vers la taille
+    attendue par le modèle (N_MEL, N_FRAMES), et fait la prédiction.
+
+    La taille envoyée par le MCU peut être DIFFÉRENTE de celle du modèle :
+    le zoom scipy.ndimage s'en charge automatiquement.
+    Exemple typique :
+        MCU envoie  : (64, 20)  → transposé → (20, 64)
+        Modèle veut : (64, 87)
+        Zoom appliqué : x3.2 sur axe fréquence, x1.36 sur axe temps
+"""
+
 import sys
 import pickle
 import numpy as np
 import requests
 import json
-import librosa
 import scipy.ndimage
 from pathlib import Path
 from datetime import datetime
 import keras
 
-"""
-Usage : uv run auth --tcp-address tcp://127.0.0.1:10000 --no-authenticate | uv run python classifier_pipe.py
-"""
+# ── Configuration ─────────────────────────────────────────────
+GROUP_KEY  = "dhhnIfhwZxTJCv7135lIm3zFtr96r3H3_xtKXRxU"
+HOSTNAME   = "http://lelec210x.sipr.ucl.ac.be/lelec210x"
 
-HOSTNAME  = "http://lelec210x.sipr.ucl.ac.be/lelec210x"
-#GROUP_KEY = "HEwRwpUXlF3aTkpQusc4bMa30NCxhqWnHnjuPu05"
-GROUP_KEY = "dhhnIfhwZxTJCv7135lIm3zFtr96r3H3_xtKXRxU"
 MODEL_PATH    = "classification/data/models/models_resnet/valacc8423_test8938_nodataaug/best_model.keras"
 METADATA_PATH = "classification/data/models/models_resnet/valacc8423_test8938_nodataaug/model_config.pkl"
-PRINT_PREFIX  = "DF:HEX:"
-GUESS_FILE    = "/tmp/latest_guess.json"
 
-CONFIDENCE_THRESHOLD = 0.6
-AUTO_SUBMIT = False
+PRINT_PREFIX = "DF:HEX:"
+GUESS_FILE   = "/tmp/latest_guess.json"
 
-# Hardware ADC — fixes, lies au MCU
-VAL_MAX_ADC       = 4096
-FREQ_SAMPLING_MCU = 10200
+CONFIDENCE_THRESHOLD = 0.51
+AUTO_SUBMIT          = False
 
-# --- Chargement modele + metadata ---
+# ── Paramètres MCU — CE QUE LE MCU ENVOIE RÉELLEMENT ─────────
+# À modifier ici si tu changes la config GNU Radio/MCU,
+# indépendamment de ce sur quoi le modèle a été entraîné.
+MCU_N_MELVECS     = 64   # nombre de frames temporelles envoyées par le MCU
+MCU_MELVEC_LENGTH = 20   # nombre de bandes mel envoyées par le MCU
+
+# ── Chargement modèle ─────────────────────────────────────────
 try:
     model = keras.models.load_model(MODEL_PATH)
-    print(f"Modele charge depuis {MODEL_PATH}", file=sys.stderr)
+    print(f"Modèle chargé depuis {MODEL_PATH}", file=sys.stderr)
 except Exception as e:
-    print(f"Erreur chargement modele : {e}", file=sys.stderr)
+    print(f"Erreur chargement modèle : {e}", file=sys.stderr)
     sys.exit(1)
 
 try:
@@ -44,81 +64,108 @@ except Exception as e:
     print(f"Erreur chargement metadata : {e}", file=sys.stderr)
     sys.exit(1)
 
-# Parametres DSP lus depuis le fichier de config sauvegarde a l'entrainement
+# ── Paramètres DSP lus depuis le pkl (ce sur quoi le modèle a été entraîné) ──
 classnames  = metadata["classnames"]
-N_MELS      = metadata.get("n_mel",       64)
-N_FFT       = metadata.get("n_fft",       512)
-HOP_LENGTH  = metadata.get("hop_length",  128)
-SAMPLE_RATE = metadata.get("sample_rate", 11025)
-input_shape = metadata.get("input_shape", (N_MELS, 87, 1))
-# Dimensions du spectrogramme envoye par le MCU via GNU Radio
-# A ajuster si tu changes n_melvecs ou melvec_length dans GNU Radio
-n_melvecs    = 64   # nombre de frames temporelles (variable GNU Radio)
-melvec_length = 20  # nombre de bandes mel par frame (variable GNU Radio)
+MODEL_N_MEL = metadata.get("n_mel",       64)
+input_shape = metadata.get("input_shape", (MODEL_N_MEL, 87, 1))
+
+# Dimensions attendues par le modèle
 if len(input_shape) == 3:
-    N_FRAMES = input_shape[1]
+    MODEL_N_FRAMES = input_shape[1]   # (N_MEL, N_FRAMES, 1)
 elif len(input_shape) == 2:
-    N_FRAMES = input_shape[1]
+    MODEL_N_FRAMES = input_shape[1]   # (N_MEL, N_FRAMES)
 elif len(input_shape) == 1:
-    N_FRAMES = input_shape[0] // N_MELS
+    MODEL_N_FRAMES = input_shape[0] // MODEL_N_MEL
 else:
-    N_FRAMES = 87
+    MODEL_N_FRAMES = 87
 
-print(f"Classes     : {classnames}", file=sys.stderr)
-print(f"Input shape : {input_shape}  (N_MEL={N_MELS}, n_frames={N_FRAMES})", file=sys.stderr)
-print(f"N_FFT={N_FFT}  hop={HOP_LENGTH}  SR={SAMPLE_RATE}Hz", file=sys.stderr)
-if FREQ_SAMPLING_MCU != SAMPLE_RATE:
-    print(f"Reechantillonnage {FREQ_SAMPLING_MCU} -> {SAMPLE_RATE} Hz", file=sys.stderr)
+# Taille brute reçue du MCU après transposition (freq, time)
+MCU_SHAPE   = (MCU_MELVEC_LENGTH, MCU_N_MELVECS)   # ex: (20, 64)
+MODEL_SHAPE = (MODEL_N_MEL, MODEL_N_FRAMES)          # ex: (64, 87)
+
+# Facteurs de zoom calculés automatiquement
+ZOOM_FREQ = MODEL_N_MEL    / MCU_MELVEC_LENGTH   # ex: 64/20  = 3.2
+ZOOM_TIME = MODEL_N_FRAMES / MCU_N_MELVECS        # ex: 87/64  = 1.36
+
+print("=" * 60, file=sys.stderr)
+print("LELEC210X ResNet Classifier Pipeline", file=sys.stderr)
+print("=" * 60, file=sys.stderr)
+print(f"Modèle attend  : {MODEL_SHAPE}  (N_MEL={MODEL_N_MEL}, N_FRAMES={MODEL_N_FRAMES})", file=sys.stderr)
+print(f"MCU envoie     : {MCU_SHAPE}   (melvec_length={MCU_MELVEC_LENGTH}, n_melvecs={MCU_N_MELVECS})", file=sys.stderr)
+
+if MCU_SHAPE == MODEL_SHAPE:
+    print("Zoom           : aucun (MCU et modèle ont la même taille)", file=sys.stderr)
+else:
+    print(f"Zoom auto      : ×{ZOOM_FREQ:.2f} fréquence, ×{ZOOM_TIME:.2f} temps", file=sys.stderr)
+    print(f"               : {MCU_SHAPE} → {MODEL_SHAPE}", file=sys.stderr)
+
+print(f"Classes        : {classnames}", file=sys.stderr)
+print(f"Seuil          : {CONFIDENCE_THRESHOLD:.0%}", file=sys.stderr)
+print(f"Mode           : {'AUTO-SUBMIT' if AUTO_SUBMIT else 'MANUEL (fichier)'}", file=sys.stderr)
+print("=" * 60, file=sys.stderr)
 
 
-# --- Feature extraction identique a uart-reader.py ---
-def raw_to_mel_features(data_uint16):
+# ── Feature extraction depuis mel MCU ─────────────────────────
+def mcu_mel_to_tensor(data_uint16):
     """
-    Meme pipeline que uart-reader.py :
-    uint16 -> float -> centrage -> normalisation -> resample -> mel -> norm spectrale -> tensor
+    Transforme les données brutes uint16 reçues du MCU en tenseur
+    compatible avec le ResNet.
+
+    Pipeline :
+    1. Reshape (N,) → (n_melvecs, melvec_length) — format MCU
+    2. Transposition → (melvec_length, n_melvecs) = (freq, time)
+    3. Conversion float + normalisation spectrale (mean/std par bande)
+    4. Zoom vers (MODEL_N_MEL, MODEL_N_FRAMES) si nécessaire
+    5. Ajout dimensions batch + canal → (1, N_MEL, N_FRAMES, 1)
+
+    Paramètres
+    ----------
+    data_uint16 : np.ndarray, shape (MCU_N_MELVECS * MCU_MELVEC_LENGTH,)
+        Données brutes reçues via UART, dtype uint16.
+
+    Retourne
+    --------
+    tensor : np.ndarray, shape (1, MODEL_N_MEL, MODEL_N_FRAMES, 1)
+    mel_2d : np.ndarray, shape (MODEL_N_MEL, MODEL_N_FRAMES)
+        Le spectrogramme après zoom, pour affichage/debug.
     """
-    y = data_uint16.astype(np.float32)
-    y -= np.mean(y)
-    y /= (np.max(np.abs(y)) + 1e-9)
+    expected_len = MCU_N_MELVECS * MCU_MELVEC_LENGTH
 
-    if FREQ_SAMPLING_MCU != SAMPLE_RATE:
-        y = librosa.resample(y, orig_sr=FREQ_SAMPLING_MCU, target_sr=SAMPLE_RATE)
+    # 1. Reshape : (N,) → (n_melvecs, melvec_length)
+    mel = data_uint16[:expected_len].astype(np.float32)
+    mel = mel.reshape(MCU_N_MELVECS, MCU_MELVEC_LENGTH)
 
-    mel = librosa.feature.melspectrogram(
-        y=y, sr=SAMPLE_RATE,
-        n_mels=N_MELS, n_fft=N_FFT, hop_length=HOP_LENGTH,
-        fmax=FREQ_SAMPLING_MCU // 2
-    )
-    log_mel = librosa.power_to_db(mel, ref=np.max)
-    log_mel = (log_mel - log_mel.mean(axis=1, keepdims=True)) / \
-              (log_mel.std(axis=1, keepdims=True) + 1e-8)
+    # 2. Transposition : (n_melvecs, melvec_length) → (freq, time)
+    #    Le MCU envoie (temps, fréquence), le modèle attend (fréquence, temps)
+    mel = mel.T   # → (MCU_MELVEC_LENGTH, MCU_N_MELVECS) = (20, 64)
 
-    if log_mel.shape != (N_MELS, N_FRAMES):
-        zoom    = [N_MELS / log_mel.shape[0], N_FRAMES / log_mel.shape[1]]
-        log_mel = scipy.ndimage.zoom(log_mel, zoom, order=1)
-    log_mel = log_mel[:N_MELS, :N_FRAMES]
+    # 3. Normalisation spectrale identique à FeatureExtractor
+    #    (mean/std par bande de fréquence, axis=1 = axe temporel)
+    mel = (mel - mel.mean(axis=1, keepdims=True)) / \
+          (mel.std(axis=1, keepdims=True) + 1e-8)
 
-    # Format selon le type de modele
-    if len(input_shape) == 1:
-        tensor = log_mel.flatten()[np.newaxis, :].astype(np.float32)
-        expected = input_shape[0]
-        if tensor.shape[1] > expected:   tensor = tensor[:, :expected]
-        elif tensor.shape[1] < expected: tensor = np.pad(tensor, ((0,0),(0,expected-tensor.shape[1])))
-    else:
-        tensor = log_mel[np.newaxis, ..., np.newaxis].astype(np.float32)
+    # 4. Zoom vers la taille attendue par le modèle
+    #    Si MCU_SHAPE == MODEL_SHAPE → zoom=(1.0, 1.0), pas de modification
+    if mel.shape != MODEL_SHAPE:
+        zoom_factors = [MODEL_N_MEL / mel.shape[0], MODEL_N_FRAMES / mel.shape[1]]
+        mel = scipy.ndimage.zoom(mel, zoom_factors, order=1)
 
-    return tensor
+    mel = mel[:MODEL_N_MEL, :MODEL_N_FRAMES]   # sécurité
+
+    # 5. Tenseur Keras : (1, N_MEL, N_FRAMES, 1)
+    tensor = mel[np.newaxis, ..., np.newaxis].astype(np.float32)
+
+    return tensor, mel
 
 
-# --- Soumission / sauvegarde ---
+# ── Soumission / sauvegarde ───────────────────────────────────
 def submit_guess(guess):
     url = f"{HOSTNAME}/lelec210x/leaderboard/submit/{GROUP_KEY}/{guess}"
     try:
         response = requests.post(url, timeout=1.0)
         print(f"Statut : {response.status_code} {response.reason}", file=sys.stderr)
-        print(f"Reponse : {response.text}", file=sys.stderr)
         if response.ok:
-            print(f"Succes : '{guess}' enregistre.", file=sys.stderr)
+            print(f"Succès : '{guess}' enregistré.", file=sys.stderr)
             return True
         return False
     except requests.exceptions.Timeout:
@@ -143,18 +190,19 @@ def save_guess_to_file(guess, probabilities):
     try:
         with open(GUESS_FILE, "w") as f:
             json.dump(guess_data, f, indent=2)
-        print(f"Guess '{guess}' sauvegarde dans {GUESS_FILE}", file=sys.stderr)
+        print(f"Guess '{guess}' sauvegardé dans {GUESS_FILE}", file=sys.stderr)
         return True
     except Exception as e:
         print(f"Erreur sauvegarde : {e}", file=sys.stderr)
         return False
 
 
-# --- Traitement d'une ligne UART ---
+# ── Traitement d'une ligne UART ───────────────────────────────
 def process_line(line):
     line = line.strip()
-    if line:  # affiche toute ligne non vide pour voir ce qui arrive
-        print(f"[DEBUG] recu : {line[:60]}...", file=sys.stderr)
+    if line:
+        print(f"[DEBUG] reçu : {line[:80]}...", file=sys.stderr)
+
     if not line.startswith(PRINT_PREFIX):
         return
 
@@ -163,42 +211,31 @@ def process_line(line):
         raw_bytes = bytes.fromhex(hex_payload)
         data = np.frombuffer(raw_bytes, dtype=np.dtype('<u2'))
 
-        expected_len = n_melvecs * melvec_length  # 64 * 20 = 1280
-        print(f"  Taille recue : {len(data)} valeurs (attendu {expected_len})", file=sys.stderr)
+        expected_len = MCU_N_MELVECS * MCU_MELVEC_LENGTH
+        print(f"  Taille reçue : {len(data)} valeurs (attendu {expected_len})", file=sys.stderr)
 
-        if len(data) != expected_len:
-            print(f"  ! Taille incorrecte : {len(data)} != {expected_len}", file=sys.stderr)
+        if len(data) < expected_len:
+            print(f"  ! Paquet trop court : {len(data)} < {expected_len} — ignoré", file=sys.stderr)
             return
 
-        # Les donnees du MCU arrivent sous forme (n_melvecs, melvec_length)
-        # = (64 frames temporelles, 20 bandes mel)
-        # On transpose en (melvec_length, n_melvecs) = (freq, time) 
-        # pour avoir le meme format que le mel-spectrogramme entraine
-        mel = data.astype(np.float32).reshape(n_melvecs, melvec_length).T
-        # mel shape : (20, 64) = (freq_bins, time_frames)
+        # Feature extraction + zoom automatique vers input_shape du modèle
+        tensor, mel_2d = mcu_mel_to_tensor(data)
 
-        # Normalisation identique a FeatureExtractor
-        mel = (mel - mel.mean(axis=1, keepdims=True)) / \
-              (mel.std(axis=1, keepdims=True) + 1e-8)
-
-        # Zoom vers (N_MEL, N_FRAMES) attendu par le ResNet = (64, 87)
-        if mel.shape != (N_MELS, N_FRAMES):
-            zoom    = [N_MELS / mel.shape[0], N_FRAMES / mel.shape[1]]
-            mel     = scipy.ndimage.zoom(mel, zoom, order=1)
-        mel = mel[:N_MELS, :N_FRAMES]
-        tensor        = raw_to_mel_features(data)
         probabilities = model.predict(tensor, verbose=0)[0]
         pred_idx      = np.argmax(probabilities)
         prediction    = classnames[pred_idx]
         confidence    = float(probabilities[pred_idx])
 
-        print(f"\nSon detecte : {prediction} ({confidence:.2%})", file=sys.stderr)
+        print(f"\nSon détecté : {prediction} ({confidence:.2%})", file=sys.stderr)
         for c, p in zip(classnames, probabilities):
-            bar = "#" * int(p * 20)
+            bar = "█" * int(p * 20)
             print(f"  {c:<15}: {p:.4f}  {bar}", file=sys.stderr)
 
         if confidence < CONFIDENCE_THRESHOLD:
-            print(f"Confiance insuffisante ({confidence:.2%} < {CONFIDENCE_THRESHOLD:.0%}) — ignore.", file=sys.stderr)
+            print(
+                f"  Confiance insuffisante ({confidence:.2%} < {CONFIDENCE_THRESHOLD:.0%}) — ignoré.",
+                file=sys.stderr
+            )
             return
 
         if AUTO_SUBMIT:
@@ -212,20 +249,9 @@ def process_line(line):
         traceback.print_exc(file=sys.stderr)
 
 
-# --- Main ---
+# ── Main ──────────────────────────────────────────────────────
 def main():
-    print("=" * 60, file=sys.stderr)
-    print("LELEC210X ResNet Classifier Pipeline", file=sys.stderr)
-    print("=" * 60, file=sys.stderr)
-    print(f"Modele  : {MODEL_PATH}", file=sys.stderr)
-    print(f"Classes : {classnames}", file=sys.stderr)
-    print(f"Seuil   : {CONFIDENCE_THRESHOLD:.0%}", file=sys.stderr)
-    print(f"Mode    : {'AUTO-SUBMIT' if AUTO_SUBMIT else 'MANUEL (fichier)'}", file=sys.stderr)
-    if AUTO_SUBMIT:
-        print(f"Serveur : {HOSTNAME}", file=sys.stderr)
-    print("=" * 60, file=sys.stderr)
-    print("En attente de donnees depuis le pipe...", file=sys.stderr)
-
+    print("En attente de données depuis le pipe...", file=sys.stderr)
     for line in sys.stdin:
         process_line(line)
 
