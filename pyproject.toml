@@ -35,7 +35,7 @@ dependencies = [
     "scipy>=1.15.3",
     "soundfile>=0.13.1",
     "tensorflow==2.18.1",
-    "tensorflow-metal==1.2.0",
+    "tensorflow-metal==1.2.0; sys_platform == 'darwin'",
     "tf-keras==2.18.0",
     "wandb>=0.25.1",
 ]
