@@ -1,0 +1,1 @@
+{"columns": ["classe", "precision", "recall", "f1", "support"], "data": [["chainsaw", 0.952, 1.0, 0.976, 40], ["fire", 1.0, 0.725, 0.841, 40], ["fireworks", 0.833, 0.75, 0.789, 40], ["gunshot", 0.717, 0.95, 0.817, 40]]}

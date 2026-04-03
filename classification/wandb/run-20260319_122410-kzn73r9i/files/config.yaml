@@ -1,0 +1,93 @@
+_wandb:
+    value:
+        cli_version: 0.25.1
+        e:
+            0ygj417t41z6l2412vnnx4yqw70kanz9:
+                apple:
+                    ecpuCores: 4
+                    gpuCores: 8
+                    memoryGb: 16
+                    name: Apple M1
+                    pcpuCores: 4
+                    ramTotalBytes: "17179869184"
+                    swapTotalBytes: "3221225472"
+                codePath: /Users/mateobauvir/Desktop/UCL/MASTER1/LELEC2102-Project/LELEC210X-project/classification/tryingClassifier.ipynb
+                codePathLocal: tryingClassifier.ipynb
+                cpu_count: 8
+                cpu_count_logical: 8
+                disk:
+                    /:
+                        total: "547065167872"
+                        used: "448745947136"
+                email: bauvir.mateo@gmail.com
+                executable: /Users/mateobauvir/Desktop/UCL/MASTER1/LELEC2102-Project/LELEC210X-project/.venv/bin/python
+                git:
+                    commit: f633ccf07e5e58002fd699a9fb6f52792a04486a
+                    remote: https://github.com/mat-bau/LELEC210X-project
+                host: wifi-student24-nat-inside-396.sri.ucl.ac.be
+                memory:
+                    total: "17179869184"
+                os: macOS-15.6.1-arm64-arm-64bit
+                program: /Users/mateobauvir/Desktop/UCL/MASTER1/LELEC2102-Project/LELEC210X-project/classification/tryingClassifier.ipynb
+                python: CPython 3.10.18
+                root: /Users/mateobauvir/Desktop/UCL/MASTER1/LELEC2102-Project/LELEC210X-project/classification
+                startedAt: "2026-03-19T11:24:10.566336Z"
+                writerId: 0ygj417t41z6l2412vnnx4yqw70kanz9
+        m: []
+        python_version: 3.10.18
+        t:
+            "1":
+                - 2
+                - 3
+                - 5
+                - 53
+            "2":
+                - 2
+                - 3
+                - 5
+                - 53
+            "3":
+                - 2
+                - 13
+                - 15
+                - 16
+            "4": 3.10.18
+            "5": 0.25.1
+            "8":
+                - 1
+            "12": 0.25.1
+            "13": darwin-arm64
+batch_size:
+    value: 32
+dropout:
+    value: 0.5
+duration_ms:
+    value: 1000
+early_stop:
+    value: 60
+epochs:
+    value: 300
+extra_aug_passes:
+    value: 60
+hop_length:
+    value: 128
+l2_reg:
+    value: 0.0001
+label_smooth:
+    value: 0.1
+learning_rate:
+    value: 0.0004
+mixup_alpha:
+    value: 0.3
+n_fft:
+    value: 512
+n_mel:
+    value: 64
+reduce_lr_factor:
+    value: 0.5
+reduce_lr_patience:
+    value: 10
+reduce_lr_plateau:
+    value: true
+sample_rate:
+    value: 11025

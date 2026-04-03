@@ -25,7 +25,7 @@ CLASSES = model.classes_ if hasattr(model, "classes_") else None
 PRINT_PREFIX = "DF:HEX:"
 FREQ_SAMPLING = 10200
 MELVEC_LENGTH = 20
-N_MELVECS = 20
+N_MELVECS = 64
 
 dt = np.dtype(np.uint16).newbyteorder("<")
 
@@ -125,13 +125,13 @@ if __name__ == "__main__":
             # 4) Plot MEL spectrogram
             # --------------------------------------------
             # On affiche la transposée pour avoir le temps en X et les fréquences en Y
-            plot_specgram(
-                mel_matrix.T,
-                ax=plt.gca(),
-                is_mel=True,
-                title=f"MEL Spectrogram #{msg_counter}",
-                xlabel="Mel vector",
-            )
-            plt.draw()
-            plt.pause(0.001)
-            plt.clf()
+            #plot_specgram(
+            #    mel_matrix.T,
+            #    ax=plt.gca(),
+            #    is_mel=True,
+            #    title=f"MEL Spectrogram #{msg_counter}",
+            #    xlabel="Mel vector",
+            #)
+            #plt.draw()
+            #plt.pause(0.001)
+            #plt.clf()
