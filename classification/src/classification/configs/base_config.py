@@ -12,7 +12,11 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import List
+
+_REPO_ROOT = Path(__file__).resolve().parents[4]  # .../LELEC210X-project/
+_DEFAULT_REAL_DATA_DIR = str(_REPO_ROOT / "mcu" / "hands_on_audio_acquisition" / "audio_files")
 
 
 @dataclass
@@ -54,7 +58,7 @@ class BaseConfig:
     COSINE_M_MUL: float = 0.65
 
     # -- Data paths ----------------------------------------------------------
-    REAL_DATA_DIR: str = "../mcu/hands_on_audio_acquisition/audio_files"
+    REAL_DATA_DIR: str = _DEFAULT_REAL_DATA_DIR
     REAL_TRAIN_SUBFOLDERS: List[str] = field(default_factory=lambda: ["training"])
     BACKGROUND_DATA_DIR: str = ""   # set to load background class (Task 3)
     SYNTH_AUG_PASSES: int = 0

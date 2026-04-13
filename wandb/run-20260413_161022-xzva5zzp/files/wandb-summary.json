@@ -1,0 +1,1 @@
+{"n_params":1648548,"epoch/epoch":93,"epoch/val_accuracy":0.34375,"epoch/learning_rate":0.00015357810480054468,"epoch/loss":0.737176239490509,"epoch/val_loss":1.691786527633667,"epoch/top_k_categorical_accuracy":1,"_timestamp":1.776089443157346e+09,"epoch/accuracy":0.9921875,"_step":94,"epoch/val_top_k_categorical_accuracy":0.5,"_wandb":{"runtime":139},"_runtime":139}

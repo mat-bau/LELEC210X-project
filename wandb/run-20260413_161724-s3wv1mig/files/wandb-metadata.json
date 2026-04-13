@@ -1,0 +1,35 @@
+{
+  "os": "macOS-26.3.1-arm64-arm-64bit",
+  "python": "CPython 3.10.20",
+  "startedAt": "2026-04-13T14:17:24.313495Z",
+  "args": [
+    "--config",
+    "resnet32",
+    "--author",
+    "mateo",
+    "--tags",
+    "32mel,swish,background-class"
+  ],
+  "program": "-m classification.training.train",
+  "git": {
+    "remote": "https://github.com/mat-bau/LELEC210X-project.git",
+    "commit": "5b6962cfd66fbe73e5a1ed761732f9b678944af9"
+  },
+  "email": "bauvir.mateo@gmail.com",
+  "root": "/Users/marcbauvir/Matéo/Cours/LELEC210X-project",
+  "host": "MacStudiodeMarc",
+  "executable": "/Users/marcbauvir/Matéo/Cours/LELEC210X-project/.venv/bin/python3",
+  "cpu_count": 16,
+  "cpu_count_logical": 16,
+  "disk": {
+    "/": {
+      "total": "994662584320",
+      "used": "208135254016"
+    }
+  },
+  "memory": {
+    "total": "137438953472"
+  },
+  "apple": {},
+  "writerId": "1fs0ovn9qzlzhfz4kh9ypexg6mwhqs8n"
+}
