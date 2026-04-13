@@ -1409,7 +1409,7 @@ dependencies = [
     { name = "scipy" },
     { name = "soundfile" },
     { name = "tensorflow" },
-    { name = "tensorflow-metal" },
+    { name = "tensorflow-metal", marker = "sys_platform == 'darwin'" },
     { name = "tf-keras" },
     { name = "wandb" },
 ]
@@ -1452,7 +1452,7 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.15.3" },
     { name = "soundfile", specifier = ">=0.13.1" },
     { name = "tensorflow", specifier = "==2.18.1" },
-    { name = "tensorflow-metal", specifier = "==1.2.0" },
+    { name = "tensorflow-metal", marker = "sys_platform == 'darwin'", specifier = "==1.2.0" },
     { name = "tf-keras", specifier = "==2.18.0" },
     { name = "wandb", specifier = ">=0.25.1" },
 ]

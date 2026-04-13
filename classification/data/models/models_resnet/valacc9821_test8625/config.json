@@ -1,0 +1,48 @@
+{
+  "SAMPLE_RATE": 11025,
+  "N_MEL": 64,
+  "N_FFT": 512,
+  "HOP_LENGTH": 128,
+  "DURATION_MS": 1000,
+  "ENABLE_TIME_SHIFT": true,
+  "ENABLE_PITCH_SHIFT": true,
+  "ENABLE_TIME_STRETCH": true,
+  "ENABLE_NOISE": true,
+  "ENABLE_SPEC_MASKING": true,
+  "PITCH_SHIFT_SEMITONES": [
+    -3,
+    3
+  ],
+  "TIME_STRETCH_RANGE": [
+    0.85,
+    1.15
+  ],
+  "NOISE_SIGMA": 0.04,
+  "DROPOUT_RATE": 0.3,
+  "L2_REG": 0.0001,
+  "LABEL_SMOOTHING": 0.15,
+  "MIXUP_ALPHA": 0.4,
+  "ACTIVATION": "relu",
+  "BATCH_SIZE": 256,
+  "EPOCHS": 300,
+  "LEARNING_RATE": 0.0005,
+  "EARLY_STOPPING_PATIENCE": 60,
+  "TTA_STEPS": 5,
+  "COSINE_RESTART_EPOCHS": 45,
+  "COSINE_M_MUL": 0.65,
+  "REAL_DATA_DIR": "../mcu/hands_on_audio_acquisition/audio_files",
+  "REAL_TRAIN_SUBFOLDERS": [
+    "training"
+  ],
+  "BACKGROUND_DATA_DIR": "",
+  "SYNTH_AUG_PASSES": 0,
+  "REAL_AUG_PASSES": 60,
+  "TRAIN_SPLIT_RATIO": 0.8,
+  "BACKGROUND_THRESHOLD": 0.4,
+  "CONFIDENCE_THRESHOLD": 0.6,
+  "VOTER_WINDOW_SIZE": 3,
+  "MODEL_DIR": "data/models/models_resnet/valacc9821_test8625",
+  "RANDOM_SEED": 42,
+  "WANDB_PROJECT": "audio-classifier",
+  "WANDB_ENTITY": "bau-mat-ucl"
+}

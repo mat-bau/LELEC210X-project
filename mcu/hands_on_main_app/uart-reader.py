@@ -25,7 +25,7 @@ CLASSES = model.classes_ if hasattr(model, "classes_") else None
 PRINT_PREFIX = "DF:HEX:"
 FREQ_SAMPLING = 10200
 MELVEC_LENGTH = 20
-N_MELVECS = 64
+N_MELVECS = 32
 
 dt = np.dtype(np.uint16).newbyteorder("<")
 

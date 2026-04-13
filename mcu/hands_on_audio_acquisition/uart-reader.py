@@ -19,8 +19,8 @@ import keras
 
 PRINT_PREFIX = "SND:HEX:"
 project_root  = Path(__file__).resolve().parents[2]
-MODEL_PATH    = project_root / "classification" / "data" / "models" / "models_resnet" / "valacc9306_test85" / "best_model_valacc9306_test85.keras"
-METADATA_PATH = project_root / "classification" / "data" / "models" / "models_resnet" / "valacc9306_test85" / "model_config.pkl"
+MODEL_PATH    = project_root / "classification" / "data" / "models" / "models_resnet" / "dimS7_22:50" / "best_model.keras"
+METADATA_PATH = project_root / "classification" / "data" / "models" / "models_resnet" / "dimS7_22:50" / "model_config.pkl"
 
 if not MODEL_PATH.exists():
     MODEL_PATH = MODEL_PATH.with_suffix(".h5")
