@@ -11,6 +11,7 @@
 
 int StartADCAcq(int32_t n_bufs);
 int IsADCFinished(void);
+void ADC_StartListening(void);
 
 extern ADC_HandleTypeDef hadc1;
 

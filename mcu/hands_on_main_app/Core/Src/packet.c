@@ -7,95 +7,83 @@
 #include "packet.h"
 #include "main.h"
 #include "utils.h"
+#include "aes.h"
+#include <string.h>
 
-const uint8_t AES_Key[16]  = {
-                            0x00,0x00,0x00,0x00,
-							0x00,0x00,0x00,0x00,
-							0x00,0x00,0x00,0x00,
-							0x00,0x00,0x00,0x00};
+extern CRYP_HandleTypeDef hcryp;
 
-void tag_cbc_mac(uint8_t *tag, const uint8_t *msg, size_t msg_len) {
-	// Allocate a buffer of the key size to store the input and result of AES
-	// uint32_t[4] is 4*(32/8)= 16 bytes long
-	uint32_t statew[4] = {0};
-	// state is a pointer to the start of the buffer
-	uint8_t *state = (uint8_t*) statew;
-    uint8_t block[16];
-    size_t i, j;
+const uint8_t AES_Key[16] = {
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00
+};
 
-    // Process message block by block (16 bytes)
-    for (i = 0; i < msg_len; i += 16) {
-
-        // Clear block
-        memset(block, 0, 16);
-
-        // Copy up to 16 bytes of message (padding with zeros if needed)
-        size_t block_len = (msg_len - i >= 16) ? 16 : (msg_len - i);
-        memcpy(block, msg + i, block_len);
-
-        // XOR block with current state
-        for (j = 0; j < 16; j++) {
-            state[j] ^= block[j];
-        }
-
-        // Encrypt state with AES
-        AES128_encrypt(state, AES_Key);   // or AES128_encrypt(state, AES_Key)
+static void swap_bytes_for_hw(uint8_t *data, size_t len) {
+    for (size_t i = 0; i < len; i += 4) {
+        uint8_t tmp0 = data[i];
+        uint8_t tmp1 = data[i+1];
+        uint8_t tmp2 = data[i+2];
+        uint8_t tmp3 = data[i+3];
+        data[i]   = tmp3;
+        data[i+1] = tmp2;
+        data[i+2] = tmp1;
+        data[i+3] = tmp0;
     }
-
-    // Copy the result to tag
-    for (j = 0; j < 16; j++) {
-        tag[j] = state[j];
-    }
-
-    
 }
 
-// Assumes payload is already in place in the packet
-int make_packet(uint8_t *packet, size_t payload_len, uint8_t sender_id, uint32_t serial) {
+void tag_cbc_mac_HW(uint8_t *tag, const uint8_t *msg, size_t msg_len)
+{
+    uint32_t statew[4] = {0};
+    uint8_t *cbc_state = (uint8_t*)statew;
+    size_t offset = 0;
+
+    hcryp.Init.pKey = (uint8_t *)AES_Key;
+    hcryp.Init.KeySize = CRYP_KEYSIZE_128B;
+    HAL_CRYP_Init(&hcryp);
+
+    while (offset < msg_len) {
+        uint8_t block[16] = {0};
+        size_t bytes_to_copy = msg_len - offset;
+        if (bytes_to_copy > 16) bytes_to_copy = 16;
+
+        memcpy(block, msg + offset, bytes_to_copy);
+
+        for (int i = 0; i < 16; i++) {
+            cbc_state[i] ^= block[i];
+        }
+
+        uint8_t temp_state[16];
+        memcpy(temp_state, cbc_state, 16);
+        swap_bytes_for_hw(temp_state, 16);
+
+        HAL_CRYP_AESECB_Encrypt(&hcryp, temp_state, 16, temp_state, HAL_MAX_DELAY);
+
+        swap_bytes_for_hw(temp_state, 16);
+        memcpy(cbc_state, temp_state, 16);
+
+        offset += bytes_to_copy;
+    }
+
+    memcpy(tag, cbc_state, 16);
+}
+
+int make_packet(uint8_t *packet, size_t payload_len, uint8_t sender_id, uint32_t serial)
+{
     size_t packet_len = payload_len + PACKET_HEADER_LENGTH + PACKET_TAG_LENGTH;
-    // Initially, the whole packet header is set to 0s
-    memset(packet, 0, PACKET_HEADER_LENGTH);
-    // So is the tag
-	memset(packet + payload_len + PACKET_HEADER_LENGTH, 0, PACKET_TAG_LENGTH);
 
-	// TO DO :  replace the two previous command by properly
-	//			setting the packet header with the following structure :
-	/***************************************************************************
-	 *    Field       	Length (bytes)      Encoding        Description
-	 ***************************************************************************
-	 *  r 					1 								Reserved, set to 0.
-	 * 	emitter_id 			1 					BE 			Unique id of the sensor node.
-	 *	payload_length 		2 					BE 			Length of app_data (in bytes).
-	 *	packet_serial 		4 					BE 			Unique and incrementing id of the packet.
-	 *	app_data 			any 							The feature vectors.
-	 *	tag 				16 								Message authentication code (MAC).
-	 *
-	 *	Note : BE refers to Big endian
-	 *		 	Use the structure 	packet[x] = y; 	to set a byte of the packet buffer
-	 *		 	To perform bit masking of the specific bytes you want to set, you can use
-	 *		 		- bitshift operator (>>),
-	 *		 		- and operator (&) with hex value, e.g.to perform 0xFF
-	 *		 	This will be helpful when setting fields that are on multiple bytes.
-	*/
-
-	packet[0] = 0x00;
-
-    // emitter_id
+    packet[0] = 0x00;
     packet[1] = sender_id;
+    packet[2] = (uint8_t)((payload_len >> 8) & 0xFF);
+    packet[3] = (uint8_t)(payload_len & 0xFF);
+    packet[4] = (uint8_t)((serial >> 24) & 0xFF);
+    packet[5] = (uint8_t)((serial >> 16) & 0xFF);
+    packet[6] = (uint8_t)((serial >> 8) & 0xFF);
+    packet[7] = (uint8_t)(serial & 0xFF);
 
-    // payload_length (Big Endian)
-    packet[2] = (payload_len >> 8) & 0xFF;
-    packet[3] = payload_len & 0xFF;
-
-    // packet_serial (Big Endian)
-    packet[4] = (serial >> 24) & 0xFF;
-    packet[5] = (serial >> 16) & 0xFF;
-    packet[6] = (serial >> 8) & 0xFF;
-    packet[7] = serial & 0xFF;
-
-	// For the tag field, you have to calculate the tag. The function call below is correct but
-	// tag_cbc_mac function, calculating the tag, is not implemented.
-    tag_cbc_mac(packet + payload_len + PACKET_HEADER_LENGTH, packet, payload_len + PACKET_HEADER_LENGTH);
+    uint8_t hw_tag[16];
+    tag_cbc_mac_HW(hw_tag, packet, payload_len + PACKET_HEADER_LENGTH);
+    memcpy(packet + payload_len + PACKET_HEADER_LENGTH, hw_tag, 16);
 
     return packet_len;
 }
