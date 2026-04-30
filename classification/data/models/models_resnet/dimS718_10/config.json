@@ -41,7 +41,7 @@
   "BACKGROUND_THRESHOLD": 0.4,
   "CONFIDENCE_THRESHOLD": 0.6,
   "VOTER_WINDOW_SIZE": 3,
-  "MODEL_DIR": "data/models/models_resnet/dimS718:10",
+  "MODEL_DIR": "data/models/models_resnet/dimS718_10",
   "RANDOM_SEED": 42,
   "WANDB_PROJECT": "audio-classifier",
   "WANDB_ENTITY": "bau-mat-ucl"

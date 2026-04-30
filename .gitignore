@@ -106,4 +106,4 @@ fpga/incremental_db/
 ## ignore vscode files
 .vscode/
 
-wandb/
+wandb/LimeSuite/

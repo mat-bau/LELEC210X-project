@@ -437,6 +437,7 @@ blocks:
   id: fsk_synchronization
   parameters:
     Grx: rx_gain
+    N_Moose: '2'
     affinity: ''
     alias: ''
     comment: ''
