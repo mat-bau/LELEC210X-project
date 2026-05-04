@@ -68,6 +68,11 @@ def _read_uart(port: str):
             print(f"[MCU] {line}")
 
 
+_PACKET_HEADER_LEN = 8
+_PACKET_TAG_LEN = 16
+_MELVEC_LENGTH = 20  # must match MCU config.h MELVEC_LENGTH
+
+
 def _read_stdin(extractor: MelExtractor):
     """
     Generator: reads from stdin (pipe from `uv run auth`).
@@ -83,7 +88,27 @@ def _read_stdin(extractor: MelExtractor):
         idx = line.index(PRINT_PREFIX_AUTH)
         hex_payload = line[idx + len(PRINT_PREFIX_AUTH):]
         try:
-            melvecs = payload_to_melvecs(hex_payload)          # (melvec_len, n_melvecs) float
+            raw_bytes = bytes.fromhex(hex_payload.strip())
+            n_bytes = len(raw_bytes)
+            row_bytes = 2 * _MELVEC_LENGTH  # 40 bytes per mel vector row
+
+            # If buffer includes the AES packet header+tag, strip them.
+            # This handles direct MCU UART output (DF:HEX: includes full packet).
+            if n_bytes % row_bytes != 0:
+                stripped = raw_bytes[_PACKET_HEADER_LEN:-_PACKET_TAG_LEN]
+                if len(stripped) % row_bytes == 0:
+                    print(f"  [STDIN] {n_bytes}B → stripped header+tag → {len(stripped)}B",
+                          file=sys.stderr)
+                    raw_bytes = stripped
+                    n_bytes = len(raw_bytes)
+                else:
+                    print(f"  [STDIN] unexpected payload size {n_bytes}B "
+                          f"(not a multiple of {row_bytes})", file=sys.stderr)
+                    continue
+
+            print(f"  [STDIN] payload {n_bytes}B ({n_bytes // row_bytes} vectors)",
+                  file=sys.stderr)
+            melvecs = payload_to_melvecs(raw_bytes.hex())      # (melvec_len, n_melvecs) float
             melvecs = melvecs.astype(np.float32)
             melvecs = (melvecs - melvecs.mean()) / (melvecs.std() + 1e-8)
             zoom = [extractor.cfg.N_MEL / melvecs.shape[0],

@@ -82,10 +82,15 @@ static void encode_packet(uint8_t *packet, uint32_t *pc) {
 
 static void send_spectrogram() {
     uint8_t packet[PACKET_LENGTH];
+
+    start_cycle_count();
     encode_packet(packet, &packet_cnt);
+    stop_cycle_count("Encode packet");
 
 #if ENABLE_RADIO
+    start_cycle_count();
     S2LP_Send(packet, PACKET_LENGTH);
+    stop_cycle_count("S2LP Send");
 #endif
 
     print_encoded_packet(packet);

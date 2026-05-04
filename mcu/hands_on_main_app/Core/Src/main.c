@@ -9,7 +9,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "adc.h"
-#include "aes.h"
+// #include "aes.h"  // HW AES optimization — disabled
 #include "dma.h"
 #include "spi.h"
 #include "tim.h"
@@ -93,7 +93,7 @@ int main(void)
     MX_SPI1_Init();
     MX_TIM3_Init();
     MX_ADC1_Init();
-    MX_AES_Init();
+    // MX_AES_Init();  // HW AES optimization — disabled
 
     /* USER CODE BEGIN 2 */
     if (ENABLE_UART) {
@@ -157,7 +157,7 @@ void SystemClock_Config(void)
     RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI;
     RCC_OscInitStruct.MSIState = RCC_MSI_ON;
     RCC_OscInitStruct.MSICalibrationValue = 0;
-    RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_5;
+    RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_6;
     RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
     if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
         Error_Handler();
