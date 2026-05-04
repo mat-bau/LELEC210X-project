@@ -18,8 +18,6 @@ Or pipe from auth:
     uv run auth | uv run python -m classification.inference.classifier_pipe \\
         --stdin --model-dir ...
 """
-from __future__ import annotations
-
 import argparse
 import os
 import sys
@@ -34,9 +32,13 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import keras
 import requests
 
+import scipy.ndimage
+
+from ..utils import payload_to_melvecs
 from .predict import MelExtractor, RealTimeVoter, load_config
 
-PRINT_PREFIX_AUDIO = "SND:HEX:"
+PRINT_PREFIX_AUTH = "DF:HEX:"   # output of `uv run auth`
+PRINT_PREFIX_UART = "SND:HEX:"  # direct UART raw-audio prefix
 
 FREQ_SAMPLING_MCU = 10200
 VAL_MAX_ADC = 4096
@@ -48,7 +50,7 @@ VDD = 3.3
 # ---------------------------------------------------------------------------
 
 def _read_uart(port: str):
-    """Generator: yields raw uint16 audio buffers from UART."""
+    """Generator: yields raw uint16 audio buffers from UART (SND:HEX: prefix)."""
     import serial
 
     ser = serial.Serial(port=port, baudrate=115200)
@@ -58,24 +60,38 @@ def _read_uart(port: str):
         while not line.endswith("\n"):
             line += ser.read_until(b"\n", size=1042).decode("ascii", errors="ignore")
         line = line.strip()
-        if line.startswith(PRINT_PREFIX_AUDIO):
-            raw_bytes = bytes.fromhex(line[len(PRINT_PREFIX_AUDIO):])
+        if line.startswith(PRINT_PREFIX_UART):
+            raw_bytes = bytes.fromhex(line[len(PRINT_PREFIX_UART):])
             dt = np.dtype(np.uint16).newbyteorder("<")
             yield np.frombuffer(raw_bytes, dtype=dt)
         else:
             print(f"[MCU] {line}")
 
 
-def _read_stdin():
-    """Generator: yields hex payloads from stdin (pipe from auth module)."""
+def _read_stdin(extractor: MelExtractor):
+    """
+    Generator: reads from stdin (pipe from `uv run auth`).
+
+    auth outputs lines like: DF:HEX:<hex>
+    The hex encodes N_MELVECS x MELVEC_LENGTH big-endian int16 mel vectors.
+    Yields (N_MEL, n_frames, 1) float32 tensors ready for the model.
+    """
     for line in sys.stdin:
         line = line.strip()
-        if PRINT_PREFIX_AUDIO in line:
-            idx = line.index(PRINT_PREFIX_AUDIO)
-            hex_part = line[idx + len(PRINT_PREFIX_AUDIO):]
-            raw_bytes = bytes.fromhex(hex_part)
-            dt = np.dtype(np.uint16).newbyteorder("<")
-            yield np.frombuffer(raw_bytes, dtype=dt)
+        if PRINT_PREFIX_AUTH not in line:
+            continue
+        idx = line.index(PRINT_PREFIX_AUTH)
+        hex_payload = line[idx + len(PRINT_PREFIX_AUTH):]
+        try:
+            melvecs = payload_to_melvecs(hex_payload)          # (melvec_len, n_melvecs) float
+            melvecs = melvecs.astype(np.float32)
+            melvecs = (melvecs - melvecs.mean()) / (melvecs.std() + 1e-8)
+            zoom = [extractor.cfg.N_MEL / melvecs.shape[0],
+                    extractor.n_frames / melvecs.shape[1]]
+            spec = scipy.ndimage.zoom(melvecs, zoom, order=1)
+            yield spec[..., np.newaxis].astype(np.float32)     # (N_MEL, n_frames, 1)
+        except Exception as e:
+            print(f"  [STDIN] decode error: {e}", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +118,7 @@ def _save_wav(buf: np.ndarray, label: str, save_dir: str = "audio_files") -> str
 # ---------------------------------------------------------------------------
 
 def run_classification_loop(
-    source,                # generator of raw uint16 buffers
+    source,
     model: keras.Model,
     extractor: MelExtractor,
     voter: RealTimeVoter,
@@ -111,12 +127,15 @@ def run_classification_loop(
     key: str = None,
     save_audio: bool = True,
     show_plot: bool = True,
+    pre_processed: bool = False,
 ) -> None:
     """
     Main loop: for each packet, classify and optionally submit.
 
-    :param source:     iterable of raw uint16 numpy arrays (from UART or stdin)
-    :param submit_url: leaderboard base URL (None = dry run)
+    :param source:         iterable yielding either raw uint16 arrays (UART) or
+                           (N_MEL, n_frames, 1) tensors (stdin/auth)
+    :param pre_processed:  True when source yields ready tensors (stdin/auth path)
+    :param submit_url:     leaderboard base URL (None = dry run)
     """
     if show_plot:
         import matplotlib.pyplot as plt
@@ -143,8 +162,7 @@ def run_classification_loop(
         probs = None
 
         try:
-            tensor = extractor.from_mcu_packet(raw_audio, FREQ_SAMPLING_MCU)
-            # tensor: (N_MEL, n_frames, 1)  — add batch dim
+            tensor = raw_audio if pre_processed else extractor.from_mcu_packet(raw_audio, FREQ_SAMPLING_MCU)
             batch = tensor[np.newaxis, ...]
             probs = model.predict(batch, verbose=0)[0]
 
@@ -229,10 +247,10 @@ def main():
                         help="Read hex payloads from stdin (pipe from auth)")
     parser.add_argument("-m", "--model-dir", required=True,
                         help="Directory containing best_model.keras + config.json")
-    parser.add_argument("--url", default=None, envvar="LEADERBOARD_URL",
-                        help="Leaderboard base URL")
-    parser.add_argument("-k", "--key", default=None, envvar="LEADERBOARD_KEY",
-                        help="Leaderboard private key")
+    parser.add_argument("--url", default=os.environ.get("LEADERBOARD_URL"),
+                        help="Leaderboard base URL (env: LEADERBOARD_URL)")
+    parser.add_argument("-k", "--key", default=os.environ.get("LEADERBOARD_KEY"),
+                        help="Leaderboard private key (env: LEADERBOARD_KEY)")
     parser.add_argument("--no-audio", action="store_true",
                         help="Disable saving .wav files")
     parser.add_argument("--no-plot", action="store_true",
@@ -275,9 +293,11 @@ def main():
 
     # -- Source --------------------------------------------------------------
     if args.stdin:
-        source = _read_stdin()
+        source = _read_stdin(extractor)
+        pre_processed = True
     else:
         source = _read_uart(args.port)
+        pre_processed = False
 
     run_classification_loop(
         source=source,
@@ -289,6 +309,7 @@ def main():
         key=args.key,
         save_audio=not args.no_audio,
         show_plot=not args.no_plot,
+        pre_processed=pre_processed,
     )
 
 
