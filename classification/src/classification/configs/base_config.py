@@ -65,10 +65,44 @@ class BaseConfig:
     REAL_AUG_PASSES: int = 60
     TRAIN_SPLIT_RATIO: float = 0.8
 
+    # -- Background overlay augmentation ------------------------------------
+    # Mixes a random chunk of real background recordings into each training
+    # sample during augmentation. Uses files from BACKGROUND_DATA_DIR.
+    # Applied in the waveform domain before mel computation.
+    ENABLE_BG_OVERLAY: bool = False
+    BG_OVERLAY_AMP: tuple = (0.05, 0.35)  # (min, max) random amplitude ratio
+
     # -- Real-time inference (Task 3) ----------------------------------------
     BACKGROUND_THRESHOLD: float = 0.4
     CONFIDENCE_THRESHOLD: float = 0.6
     VOTER_WINDOW_SIZE: int = 3
+
+    # -- Architecture extras (optional) --------------------------------------
+    USE_SE_BLOCKS: bool = False       # Squeeze-and-Excitation channel attention
+    MIXED_PRECISION: bool = False     # fp16 training (faster on GPU/MPS)
+
+    # -- Normalisation -------------------------------------------------------
+    # NORM_MODE controls how the mel spectrogram is computed and normalised:
+    #   "db"         — fixed dB scaling: power_to_db(ref=max) / 80 → [-1, 0]
+    #                  Preserves inter-band energy contrast. MCU-friendly (divide by constant).
+    #   "l2"         — L2 norm (Frobenius): spec / ||flatten(spec)||₂ → unit-norm vector.
+    #                  Fully amplitude-invariant. Matches h5a2_audio.ipynb KNN normalisation.
+    #                  Applied to both real data (MelExtractor) and synthetic data (Feature_vector_DS).
+    #   "zscore"     — Per-band z-score along the time axis (axis=1):
+    #                  spec[m, :] = (spec[m, :] - mean) / (std + ε)
+    #                  Each frequency band is independently centred and scaled.
+    #                  WARNING: amplifies noise in silent bands → uniform noisy appearance.
+    #   "mcu_linear" — LINEAR magnitude mel with Hamming window, no log transform.
+    #                  Simulates the MCU DSP pipeline (spectrogram.c):
+    #                    arm_rfft_q15 → |magnitude| → mel filterbank → Q1.15
+    #                  Normalised to [0, 1] by dividing by the window maximum.
+    #                  At inference, MCU Q1.15 int16 values are converted by / 32768.
+    #                  Use with MCUMatchConfig (HOP_LENGTH=512, N_FFT=512, SAMPLE_RATE=10200).
+    NORM_MODE: str = "db"
+
+    # Path to norm_stats.npz saved by train.py for global per-freq normalisation.
+    # Empty string = use NORM_MODE above.
+    NORMALIZATION_STATS_PATH: str = ""
 
     # -- Output --------------------------------------------------------------
     MODEL_DIR: str = "./data/models/models_resnet/run"

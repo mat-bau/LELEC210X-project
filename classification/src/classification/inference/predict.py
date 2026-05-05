@@ -45,9 +45,46 @@ class MelExtractor:
     def input_shape(self) -> tuple:
         return (self.cfg.N_MEL, self.n_frames, 1)
 
+    # dB range produced by librosa.power_to_db(ref=np.max)
+    _DB_RANGE: float = 80.0
+
     def _compute_mel(self, signal: np.ndarray, sr: int) -> np.ndarray:
-        """Normalised log-mel spectrogram, per-frequency zero-mean unit-var."""
+        """
+        Mel spectrogram computation and normalisation.
+
+        NORM_MODE dispatch:
+          "mcu_linear" — Linear magnitude mel, Hamming window, no log.
+                         Matches the MCU DSP pipeline (spectrogram.c):
+                           arm_rfft_q15 → |magnitude| → mel filterbank → Q1.15
+                         Output range [0, 1] = MCU Q1.15 int16 / 32768.
+                         Must use HOP_LENGTH=N_FFT=512, SAMPLE_RATE=10200.
+
+          "db"         — power_to_db(ref=max) / 80 → [-1, 0].  (default)
+          "l2"         — Frobenius L2 norm → unit-norm vector.
+          "zscore"     — Per-band z-score along time axis (WARNING: amplifies noise).
+
+          Global stats override (NORMALIZATION_STATS_PATH): per-frequency
+          mean/std from the training set, applied instead of NORM_MODE.
+        """
         signal = signal / (np.max(np.abs(signal)) + 1e-8)
+
+        norm_mode  = getattr(self.cfg, "NORM_MODE", "db")
+        stats_path = getattr(self.cfg, "NORMALIZATION_STATS_PATH", "")
+
+        # -- MCU linear magnitude path (branches early: different mel computation) --
+        if norm_mode == "mcu_linear" and not (stats_path and os.path.exists(stats_path)):
+            mel = librosa.feature.melspectrogram(
+                y=signal, sr=sr,
+                n_mels=self.cfg.N_MEL,
+                n_fft=self.cfg.N_FFT,
+                hop_length=self.cfg.HOP_LENGTH,
+                window='hamming',  # matches MCU Hamming window
+                power=1,           # linear magnitude spectrum (not power²)
+            )
+            # Normalise to [0, 1]: equivalent to MCU Q1.15 int16 / 32768
+            return mel / (mel.max() + 1e-8)
+
+        # -- Log-mel base (all other modes) --
         mel = librosa.feature.melspectrogram(
             y=signal, sr=sr,
             n_mels=self.cfg.N_MEL,
@@ -55,9 +92,23 @@ class MelExtractor:
             hop_length=self.cfg.HOP_LENGTH,
         )
         log_mel = librosa.power_to_db(mel, ref=np.max)
-        log_mel = (log_mel - log_mel.mean(axis=1, keepdims=True)) / \
-                  (log_mel.std(axis=1, keepdims=True) + 1e-8)
-        return log_mel
+
+        if stats_path and os.path.exists(stats_path):
+            # Global normalisation — load once, cache on instance
+            if not hasattr(self, "_norm_mean"):
+                data = np.load(stats_path)
+                self._norm_mean = data["mean"][:, np.newaxis]  # (N_MEL, 1)
+                self._norm_std  = data["std"][:, np.newaxis]   # (N_MEL, 1)
+            return (log_mel - self._norm_mean) / (self._norm_std + 1e-8)
+
+        if norm_mode == "l2":
+            return log_mel / (np.linalg.norm(log_mel) + 1e-8)
+        elif norm_mode == "zscore":
+            return ((log_mel - log_mel.mean(axis=1, keepdims=True)) /
+                    (log_mel.std(axis=1, keepdims=True) + 1e-8))
+        else:
+            # Fixed-range scaling: [-80, 0] dB → [-1, 0]  (default: "db")
+            return log_mel / self._DB_RANGE
 
     def _sliding_windows(self, log_mel: np.ndarray) -> list:
         T = log_mel.shape[1]

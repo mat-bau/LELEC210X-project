@@ -12,6 +12,7 @@ Or imported programmatically:
 """
 from __future__ import annotations
 
+import multiprocessing
 import os
 import pickle
 import time
@@ -24,8 +25,11 @@ from keras.utils import to_categorical
 
 from ..configs.base_config import BaseConfig
 from ..configs.resnet32 import ResNet32Config
+from ..configs.mcu_match import (
+    MCUMatchConfig, Mel24MCUConfig, Mel28MCUConfig, Mel32MCUConfig,
+)
 from ..data.augmentation import MixupGenerator
-from ..data.dataset import prepare_dataset
+from ..data.dataset import prepare_dataset, compute_global_stats
 from ..inference.predict import MelExtractor
 from ..models.resnet import build_model
 from ..training.callbacks import _build_callbacks
@@ -33,12 +37,48 @@ from ..training.evaluate import evaluate_model, plot_training_history
 
 
 # ---------------------------------------------------------------------------
+# Hardware setup (Metal GPU on macOS / CUDA on Linux)
+# ---------------------------------------------------------------------------
+
+def setup_hardware() -> None:
+    """
+    Configure TF for the available hardware.
+
+    - macOS Mac Studio / Apple Silicon: enables tensorflow-metal GPU with
+      memory growth (prevents full VRAM allocation at startup).
+    - All platforms: sets CPU parallelism threads to the available core count.
+
+    Call once before any model build or training.
+    """
+    import tensorflow as tf
+
+    gpus = tf.config.list_physical_devices("GPU")
+    for gpu in gpus:
+        # Memory growth = allocate VRAM incrementally (required for Metal)
+        tf.config.experimental.set_memory_growth(gpu, True)
+
+    n_cores = multiprocessing.cpu_count()
+    tf.config.threading.set_intra_op_parallelism_threads(n_cores)
+    tf.config.threading.set_inter_op_parallelism_threads(min(4, n_cores))
+
+    backend = "Metal GPU" if any("GPU" in g.device_type for g in gpus) else "CPU only"
+    if gpus:
+        backend = f"Metal GPU — {gpus[0].name}"
+    print(f"  Hardware  : {backend}")
+    print(f"  TF {tf.__version__} | Keras {keras.__version__} | CPU cores {n_cores}")
+
+
+# ---------------------------------------------------------------------------
 # Config registry — add new configs here
 # ---------------------------------------------------------------------------
 
 CONFIG_REGISTRY: dict = {
-    "base":     BaseConfig,
-    "resnet32": ResNet32Config,
+    "base":      BaseConfig,
+    "resnet32":  ResNet32Config,
+    "mcu_match": MCUMatchConfig,
+    "mel24_mcu": Mel24MCUConfig,
+    "mel28_mcu": Mel28MCUConfig,
+    "mel32_mcu": Mel32MCUConfig,
 }
 
 
@@ -92,7 +132,8 @@ def train_model(model: keras.Model, X_train, y_train, X_val, y_val,
 
 def save_model_and_metadata(model: keras.Model, classnames: list,
                              extractor: MelExtractor, metrics: dict,
-                             cfg: BaseConfig) -> None:
+                             cfg: BaseConfig,
+                             X_train: np.ndarray | None = None) -> None:
     """
     Save model + metadata.
 
@@ -108,6 +149,14 @@ def save_model_and_metadata(model: keras.Model, classnames: list,
     model_path = os.path.join(cfg.MODEL_DIR, "best_model.keras")
     model.save(model_path)
     model.save_weights(os.path.join(cfg.MODEL_DIR, "best_model.weights.h5"))
+
+    # Global normalisation stats (optional — only when NORMALIZATION_STATS_PATH set)
+    if getattr(cfg, "NORMALIZATION_STATS_PATH", "") and X_train is not None:
+        mean, std = compute_global_stats(X_train)
+        stats_path = os.path.join(cfg.MODEL_DIR, "norm_stats.npz")
+        np.savez(stats_path, mean=mean, std=std)
+        cfg.NORMALIZATION_STATS_PATH = stats_path
+        print(f"  Global norm stats saved to {stats_path}")
 
     # config.json (preferred)
     cfg.to_json(os.path.join(cfg.MODEL_DIR, "config.json"))
@@ -149,6 +198,14 @@ def run_pipeline(synth_dataset, cfg: BaseConfig,
     """
     os.makedirs(cfg.MODEL_DIR, exist_ok=True)
 
+    # Hardware setup — Metal GPU + CPU threading
+    setup_hardware()
+
+    # Mixed precision (optional — speeds up training on GPU/MPS)
+    if getattr(cfg, "MIXED_PRECISION", False):
+        keras.mixed_precision.set_global_policy("mixed_float16")
+        print("  Mixed precision: float16 enabled")
+
     run_name = run_name or f"resnet_{time.strftime('%m%d_%H%M')}"
     run = _init_wandb(cfg, run_name, tags or [])
 
@@ -179,6 +236,10 @@ def run_pipeline(synth_dataset, cfg: BaseConfig,
         "final/test_acc":  metrics["test"],
     })
 
+    # Save model + metadata first so config.json exists before W&B artifact upload
+    save_model_and_metadata(best_model, classnames, extractor, metrics, cfg,
+                            X_train=X_train)
+
     # Log config.json + model as W&B artifacts
     artifact_cfg = wandb.Artifact("config", type="config")
     artifact_cfg.add_file(os.path.join(cfg.MODEL_DIR, "config.json"))
@@ -188,8 +249,6 @@ def run_pipeline(synth_dataset, cfg: BaseConfig,
     artifact_model.add_file(os.path.join(cfg.MODEL_DIR, "best_model.keras"))
     run.log_artifact(artifact_model)
     wandb.finish()
-
-    save_model_and_metadata(best_model, classnames, extractor, metrics, cfg)
 
     print(f"\n  Test accuracy (TTA x{cfg.TTA_STEPS}) : {100*metrics['test']:.2f}%")
     return best_model, metrics, classnames, extractor
@@ -239,6 +298,10 @@ def main(config: str, author: str, tags: str, model_dir: str,
             pass
 
     run_pipeline(dataset, cfg, run_name=run_name, tags=tag_list)
+    # Force exit: TF Metal GPU threads and wandb background threads are
+    # non-daemon and would otherwise keep the process alive indefinitely.
+    # All files (model, pkl, json, W&B artifacts) are saved before this point.
+    os._exit(0)
 
 
 if __name__ == "__main__":

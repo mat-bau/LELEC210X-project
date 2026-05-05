@@ -25,8 +25,12 @@ requires-python = ">= 3.9"
 version = "0.1.0"
 
 [project.scripts]
-classify = "classification.__main__:main"
-split-audio = "classification.utils.split_audio:main"
+classify       = "classification.__main__:main"
+split-audio    = "classification.utils.split_audio:main"
+evaluate-model = "classification.training.standalone_eval:evaluate_model_cmd"
+sweep-mel      = "classification.training.sweep_mel:sweep_mel_cmd"
+big-sweep      = "classification.training.big_sweep:big_sweep_cmd"
+pretrain-jepa  = "classification.models.jepa:pretrain_jepa_cmd"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/classification"]

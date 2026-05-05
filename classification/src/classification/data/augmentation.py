@@ -6,6 +6,9 @@ MixupGenerator    — Keras Sequence that applies MixUp on-the-fly.
 """
 from __future__ import annotations
 
+import glob
+import os
+
 import numpy as np
 import librosa
 import librosa.effects
@@ -15,6 +18,9 @@ from keras.utils import to_categorical
 
 from ..configs.base_config import BaseConfig
 from ..utils.audio_student import AudioUtil
+
+# Module-level cache: bg_dir -> list of .wav paths (avoids repeated glob)
+_BG_FILE_CACHE: dict = {}
 
 
 class AudioAugmentation:
@@ -49,6 +55,49 @@ class AudioAugmentation:
         return np.pad(stretched, (0, len(signal) - len(stretched)))
 
     @staticmethod
+    def add_real_background(signal: np.ndarray, sr: int,
+                            cfg: BaseConfig) -> np.ndarray:
+        """
+        Mix a random chunk of a real background recording into signal.
+
+        Scans cfg.BACKGROUND_DATA_DIR recursively for .wav files (result is
+        cached per directory). Picks one file at random, extracts a random
+        contiguous chunk of the same length as signal, and adds it at an
+        amplitude drawn uniformly from cfg.BG_OVERLAY_AMP.
+        """
+        bg_dir = getattr(cfg, "BACKGROUND_DATA_DIR", "")
+        if not bg_dir or not os.path.isdir(bg_dir):
+            return signal
+
+        if bg_dir not in _BG_FILE_CACHE:
+            _BG_FILE_CACHE[bg_dir] = glob.glob(
+                os.path.join(bg_dir, "**", "*.wav"), recursive=True
+            )
+
+        bg_files = _BG_FILE_CACHE[bg_dir]
+        if not bg_files:
+            return signal
+
+        bg_path = bg_files[np.random.randint(len(bg_files))]
+        try:
+            bg_sig, _ = librosa.load(bg_path, sr=sr, mono=True)
+        except Exception:
+            return signal
+
+        n = len(signal)
+        if len(bg_sig) < n:
+            # Loop until long enough
+            repeats = int(np.ceil(n / len(bg_sig)))
+            bg_sig = np.tile(bg_sig, repeats)
+
+        start = np.random.randint(0, len(bg_sig) - n + 1)
+        bg_chunk = bg_sig[start:start + n]
+
+        amp_min, amp_max = getattr(cfg, "BG_OVERLAY_AMP", (0.05, 0.35))
+        amp = float(np.random.uniform(amp_min, amp_max))
+        return signal + amp * bg_chunk
+
+    @staticmethod
     def apply(audio: tuple, cfg: BaseConfig, skip_noise: bool = False) -> tuple:
         """Apply all enabled augmentations with 50% probability each."""
         sig, sr = audio
@@ -60,6 +109,10 @@ class AudioAugmentation:
             sig = AudioAugmentation.time_stretch(sig, cfg.TIME_STRETCH_RANGE)
         if not skip_noise and cfg.ENABLE_NOISE and np.random.random() > 0.5:
             sig, sr = AudioUtil.add_noise((sig, sr), sigma=cfg.NOISE_SIGMA)
+        if (getattr(cfg, "ENABLE_BG_OVERLAY", False)
+                and getattr(cfg, "BACKGROUND_DATA_DIR", "")
+                and np.random.random() > 0.5):
+            sig = AudioAugmentation.add_real_background(sig, sr, cfg)
         return sig, sr
 
 

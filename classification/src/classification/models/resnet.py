@@ -2,8 +2,10 @@
 ResNet-small architecture for audio mel-spectrogram classification.
 
 Functions:
-    _residual_block(x, filters, stride, l2, activation_fn) -> tensor
-    build_model(input_shape, n_classes, cfg) -> keras.Model
+    _res_block(x, filters, stride, l2, act_name)             -> tensor
+    _se_block(x, filters, reduction)                          -> tensor (SE attention)
+    build_encoder_body(input_shape, cfg)                      -> keras.Model (no head)
+    build_model(input_shape, n_classes, cfg)                  -> keras.Model
 """
 from __future__ import annotations
 
@@ -53,6 +55,66 @@ def _residual_block(x, filters: int, stride: int = 1, l2: float = 1e-4,
     return x
 
 
+def _se_block(x, filters: int, reduction: int = 16):
+    """
+    Squeeze-and-Excitation channel attention block.
+
+    Adds ~(2 * filters^2 / reduction) parameters per block.
+    Typical improvement: +1-2% accuracy at negligible cost.
+
+    :param reduction: bottleneck ratio (default 16, use 8 for very small filters)
+    """
+    bottleneck = max(1, filters // reduction)
+    se = layers.GlobalAveragePooling2D(keepdims=True)(x)   # (B, 1, 1, C)
+    se = layers.Conv2D(bottleneck, 1, activation="relu",
+                       use_bias=True)(se)                   # (B, 1, 1, bottleneck)
+    se = layers.Conv2D(filters, 1, activation="sigmoid",
+                       use_bias=True)(se)                   # (B, 1, 1, C)
+    return layers.Multiply()([x, se])
+
+
+def _resnet_blocks(x, cfg: BaseConfig, act_name: str):
+    """Shared residual block stack used by both build_model and build_encoder_body."""
+    use_se = getattr(cfg, "USE_SE_BLOCKS", False)
+    for filters, stride in [(64, 1), (64, 1), (128, 2), (128, 1), (256, 2)]:
+        x = _res_block(x, filters, stride=stride, l2=cfg.L2_REG, act_name=act_name)
+        if use_se:
+            x = _se_block(x, filters)
+    return x
+
+
+def build_encoder_body(input_shape: tuple, cfg: BaseConfig) -> keras.Model:
+    """
+    ResNet body WITHOUT GlobalAveragePooling2D or Dense classification head.
+
+    Output: feature map of shape (H/8, W/8, 256) where H, W are the input
+    spatial dims.  For MCUMatchConfig (20, 32, 1) the output is (3, 4, 256).
+
+    Used by:
+        - Audio-JEPA pretraining (context encoder + target encoder)
+        - Any downstream task that needs raw spatial features
+
+    :param input_shape: (N_MEL, n_frames, 1)
+    :param cfg:         BaseConfig (activation, l2_reg, use_se_blocks)
+    :returns: Keras Model with output shape (batch, H/8, W/8, 256)
+    """
+    act_name = cfg.ACTIVATION
+    reg = regularizers.l2(cfg.L2_REG)
+    inp = layers.Input(shape=input_shape)
+
+    # Stem
+    x = layers.Conv2D(32, 5, padding="same", kernel_regularizer=reg,
+                      use_bias=False)(inp)
+    x = layers.BatchNormalization()(x)
+    x = get_activation_fn(act_name)(x)
+    x = layers.MaxPool2D(2, padding="same")(x)
+
+    # Residual blocks (shared with build_model)
+    x = _resnet_blocks(x, cfg, act_name)
+
+    return models.Model(inp, x, name="ResNet_Encoder_Body")
+
+
 def build_model(input_shape: tuple, n_classes: int, cfg: BaseConfig) -> keras.Model:
     """
     ResNet-small for audio spectrograms.
@@ -78,10 +140,8 @@ def build_model(input_shape: tuple, n_classes: int, cfg: BaseConfig) -> keras.Mo
     x = get_activation_fn(act_name)(x)
     x = layers.MaxPool2D(2, padding="same")(x)
 
-    # -- Residual blocks -----------------------------------------------------
-    for filters, stride in [(64, 1), (64, 1), (128, 2), (128, 1), (256, 2)]:
-        x = _res_block(x, filters, stride=stride, l2=cfg.L2_REG,
-                       act_name=act_name)
+    # -- Residual blocks (with optional SE attention) ------------------------
+    x = _resnet_blocks(x, cfg, act_name)
 
     # -- Head ----------------------------------------------------------------
     x = layers.GlobalAveragePooling2D()(x)

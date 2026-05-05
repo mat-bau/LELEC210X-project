@@ -20,45 +20,124 @@ import keras
 # Layer detection
 # ---------------------------------------------------------------------------
 
-def auto_detect_last_conv_layer(model: keras.Model) -> str:
+def _build_shape_cache(model: keras.Model) -> dict:
     """
-    Find the last convolutional ReLU-type layer before GlobalAveragePooling2D.
+    Compute output shapes for all layers by building sub-models.
 
-    Heuristic: iterate layers in reverse, return the first layer whose name
-    contains 're_lu', 'relu', 'swish', 'gelu', 'mish', or 'leaky' AND whose
-    output rank is 4 (batch, H, W, C), stopping before GAP.
+    In Keras 3, `layer.output_shape` is no longer a valid property on
+    deserialized layers — it raises AttributeError. This function builds a
+    sub-model for each layer and runs a single dummy forward pass to obtain
+    the actual output shape, storing results in a name → tuple dict.
+    """
+    import tensorflow as tf
+
+    # Build dummy input matching the model's input shape
+    raw = model.input_shape
+    # Functional models return a list of shape tuples
+    if isinstance(raw, list):
+        inp_shape = raw[0][1:]
+    else:
+        inp_shape = raw[1:]
+    dummy = tf.zeros((1,) + tuple(
+        s if s is not None else 1 for s in inp_shape
+    ))
+
+    cache: dict = {}
+    for layer in model.layers:
+        try:
+            sub = keras.Model(inputs=model.inputs, outputs=layer.output)
+            out = sub(dummy, training=False)
+            if isinstance(out, (list, tuple)):
+                out = out[0]
+            cache[layer.name] = tuple(out.shape)
+        except Exception:
+            pass
+    return cache
+
+
+def auto_detect_last_conv_layer(model: keras.Model,
+                                min_spatial: int = 4) -> str:
+    """
+    Find the last conv/activation layer before the head GlobalAveragePooling2D
+    whose spatial output dimensions are both ≥ min_spatial.
+
+    Keras 3 compatibility: uses sub-model forward passes instead of
+    layer.output_shape (which is no longer available after deserialization).
+
+    Heuristic (applied in reverse layer order):
+      - Skip all layers that come after the head GAP (i.e., classifier head).
+      - Skip SE-block internal GAPs (they appear before the head GAP going
+        forward, so in reverse they appear first — only the LAST global_average
+        in reverse order is the head GAP; the others are SE block internals
+        and are skipped).
+      - Among spatial (rank-4) layers with both h ≥ min_spatial and
+        w ≥ min_spatial, prefer activation layers (relu/swish/…) over raw
+        Conv2D so the heatmap benefits from the non-linearity.
+    Falls back to min_spatial=1 if nothing passes the threshold.
     """
     activation_keywords = ("re_lu", "relu", "swish", "gelu", "mish", "leaky",
                             "activation", "lambda")
-    gap_found = False
-    for layer in reversed(model.layers):
-        lname = layer.name.lower()
-        if "global_average" in lname:
-            gap_found = True
-            continue
-        if not gap_found:
-            continue
-        try:
-            out_shape = layer.output_shape
-        except AttributeError:
-            continue
-        if isinstance(out_shape, list):
-            out_shape = out_shape[0]
-        if len(out_shape) != 4:
-            continue
-        if any(kw in lname for kw in activation_keywords):
+
+    shape_cache = _build_shape_cache(model)
+
+    def _get_spatial(layer_name: str):
+        """Return (h, w) or None if the layer output is not rank-4."""
+        shape = shape_cache.get(layer_name)
+        if shape is None or len(shape) != 4:
+            return None
+        h, w = shape[1], shape[2]
+        if h is None or w is None:
+            return None
+        return int(h), int(w)
+
+    def _try_find(min_sp: int) -> str | None:
+        # Pass 1: prefer activation layers
+        head_gap_found = False
+        for layer in reversed(model.layers):
+            lname = layer.name.lower()
+            if "global_average" in lname:
+                if not head_gap_found:
+                    head_gap_found = True   # first GAP in reverse = head GAP
+                # all subsequent (earlier) GAPs are SE-block internals — skip
+                continue
+            if not head_gap_found:
+                continue
+            hw = _get_spatial(layer.name)
+            if hw is None:
+                continue
+            h, w = hw
+            if h < min_sp or w < min_sp:
+                continue
+            if any(kw in lname for kw in activation_keywords):
+                return layer.name
+
+        # Pass 2: fallback to any Conv2D with enough spatial resolution
+        head_gap_found = False
+        for layer in reversed(model.layers):
+            lname = layer.name.lower()
+            if "global_average" in lname:
+                if not head_gap_found:
+                    head_gap_found = True
+                continue
+            if not head_gap_found:
+                continue
+            if "conv2d" not in lname:
+                continue
+            hw = _get_spatial(layer.name)
+            if hw is None:
+                continue
+            h, w = hw
+            if h < min_sp or w < min_sp:
+                continue
             return layer.name
-    # Fallback: last Conv2D before GAP
-    for layer in reversed(model.layers):
-        lname = layer.name.lower()
-        if "global_average" in lname:
-            gap_found = True
-            continue
-        if not gap_found:
-            continue
-        if "conv2d" in lname:
-            return layer.name
-    raise RuntimeError("Could not detect a suitable last conv layer in the model.")
+        return None
+
+    result = _try_find(min_spatial)
+    if result is None:
+        result = _try_find(1)
+    if result is None:
+        raise RuntimeError("Could not detect a suitable last conv layer in the model.")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -98,14 +177,14 @@ def compute_gradcam(model: keras.Model, spectrogram: np.ndarray,
 
     conv_outputs = conv_outputs[0]                       # (h, w, C)
     heatmap = conv_outputs @ pooled_grads[..., tf.newaxis]
-    heatmap = tf.squeeze(heatmap)                        # (h, w)
+    heatmap = tf.squeeze(heatmap)                        # (h, w) — or scalar if 1×1 conv
     heatmap = tf.maximum(heatmap, 0) / (tf.math.reduce_max(heatmap) + 1e-8)
-    heatmap = heatmap.numpy()
+    heatmap = np.atleast_2d(heatmap.numpy())             # guard: ensure at least 2D
 
     # Resize to input resolution via bilinear interpolation
     h_in, w_in = spectrogram.shape[:2]
     heatmap_resized = tf.image.resize(
-        heatmap[np.newaxis, ..., np.newaxis],
+        heatmap[np.newaxis, ..., np.newaxis],            # (1, h, w, 1) — always 4D
         [h_in, w_in],
         method="bilinear",
     )[0, :, :, 0].numpy()
