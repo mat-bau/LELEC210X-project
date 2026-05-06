@@ -110,7 +110,7 @@ def _read_stdin(extractor: MelExtractor):
                   file=sys.stderr)
             melvecs = payload_to_melvecs(raw_bytes.hex())      # (melvec_len, n_melvecs) float
             melvecs = melvecs.astype(np.float32)
-            melvecs = (melvecs - melvecs.mean()) / (melvecs.std() + 1e-8)
+            melvecs = melvecs / (melvecs.max() + 1e-8)
             zoom = [extractor.cfg.N_MEL / melvecs.shape[0],
                     extractor.n_frames / melvecs.shape[1]]
             spec = scipy.ndimage.zoom(melvecs, zoom, order=1)
