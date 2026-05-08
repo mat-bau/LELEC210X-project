@@ -206,14 +206,25 @@ def run_classification_loop(
             print(f"  Classification error: {e}")
 
         # -- Submit every prediction -----------------------------------------
-        if probs is not None and submit_url and key:
-            try:
-                resp = requests.post(
-                    f"{submit_url}/lelec210x/leaderboard/submit/{key}/{prediction}"
-                )
-                print(f"  [HTTP]   SUBMIT {prediction.upper()} -> {resp.status_code}  {resp.text[:120]}")
-            except Exception as e:
-                print(f"  [HTTP]   Error: {e}")
+        if probs is not None:
+            url = f"{submit_url}/lelec210x/leaderboard/submit/{key}/{prediction}" if (submit_url and key) else None
+            if url is None:
+                missing = []
+                if not submit_url: missing.append("--url")
+                if not key:        missing.append("--key")
+                print(f"  [HTTP]   DRY RUN (missing: {', '.join(missing)}) — would submit {prediction.upper()}")
+            else:
+                print(f"  [HTTP]   POST {url}")
+                try:
+                    resp = requests.post(url, timeout=5)
+                    print(f"  [HTTP]   {resp.status_code} {resp.reason}")
+                    print(f"  [HTTP]   body: {resp.text[:300]}")
+                except requests.exceptions.ConnectionError as e:
+                    print(f"  [HTTP]   ConnectionError — serveur injoignable: {e}")
+                except requests.exceptions.Timeout:
+                    print(f"  [HTTP]   Timeout (5s) — le serveur ne répond pas")
+                except Exception as e:
+                    print(f"  [HTTP]   Erreur inattendue: {type(e).__name__}: {e}")
 
         # -- Save audio ------------------------------------------------------
         if save_audio and not pre_processed:
