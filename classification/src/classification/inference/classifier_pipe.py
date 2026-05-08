@@ -35,7 +35,7 @@ import requests
 import scipy.ndimage
 
 from ..utils import payload_to_melvecs
-from .predict import MelExtractor, RealTimeVoter, load_config
+from .predict import MelExtractor, load_config
 
 PRINT_PREFIX_AUTH = "DF:HEX:"   # output of `uv run auth`
 PRINT_PREFIX_UART = "SND:HEX:"  # direct UART raw-audio prefix
@@ -146,7 +146,6 @@ def run_classification_loop(
     source,
     model: keras.Model,
     extractor: MelExtractor,
-    voter: RealTimeVoter,
     classnames: list,
     submit_url: str = None,
     key: str = None,
@@ -206,24 +205,18 @@ def run_classification_loop(
         except Exception as e:
             print(f"  Classification error: {e}")
 
-        # -- RealTimeVoter decision ------------------------------------------
-        if probs is not None:
-            result = voter.update(probs)
-            if result is not None:
-                print(f"\n  [VOTER]  SUBMIT -> {result.upper()}")
-                if submit_url and key:
-                    try:
-                        resp = requests.post(
-                            f"{submit_url}/lelec210x/leaderboard/submit/{key}/{result}"
-                        )
-                        print(f"  [HTTP]   {resp.status_code}  {resp.text[:120]}")
-                    except Exception as e:
-                        print(f"  [HTTP]   Error: {e}")
-            else:
-                print(f"  [VOTER]  no submission (filtered or window not full)")
+        # -- Submit every prediction -----------------------------------------
+        if probs is not None and submit_url and key:
+            try:
+                resp = requests.post(
+                    f"{submit_url}/lelec210x/leaderboard/submit/{key}/{prediction}"
+                )
+                print(f"  [HTTP]   SUBMIT {prediction.upper()} -> {resp.status_code}  {resp.text[:120]}")
+            except Exception as e:
+                print(f"  [HTTP]   Error: {e}")
 
         # -- Save audio ------------------------------------------------------
-        if save_audio:
+        if save_audio and not pre_processed:
             try:
                 path = _save_wav(raw_audio, prediction)
                 print(f"  WAV -> {path}")
@@ -234,16 +227,19 @@ def run_classification_loop(
         if show_plot and mel_matrix is not None:
             try:
                 import matplotlib.pyplot as plt
-                times = np.linspace(0, len(raw_audio) / FREQ_SAMPLING_MCU,
-                                    len(raw_audio))
-                voltage_mV = raw_audio * VDD / VAL_MAX_ADC * 1e3
                 ax1.clear()
-                ax1.plot(times, voltage_mV, lw=0.8)
+                if not pre_processed:
+                    times = np.linspace(0, len(raw_audio) / FREQ_SAMPLING_MCU,
+                                        len(raw_audio))
+                    voltage_mV = raw_audio * VDD / VAL_MAX_ADC * 1e3
+                    ax1.plot(times, voltage_mV, lw=0.8)
+                    ax1.set_xlabel("Time (s)")
+                    ax1.set_ylabel("Voltage (mV)")
+                    ax1.grid(alpha=0.3)
+                else:
+                    ax1.axis("off")
                 ax1.set_title(f"Waveform  —  {prediction} ({confidence:.1%})",
                               fontsize=12)
-                ax1.set_xlabel("Time (s)")
-                ax1.set_ylabel("Voltage (mV)")
-                ax1.grid(alpha=0.3)
 
                 im_mel.set_data(mel_matrix)
                 im_mel.set_clim(vmin=mel_matrix.min(), vmax=mel_matrix.max())
@@ -280,6 +276,12 @@ def main():
                         help="Disable saving .wav files")
     parser.add_argument("--no-plot", action="store_true",
                         help="Disable live matplotlib plot")
+    parser.add_argument("--bg-threshold", type=float, default=None,
+                        help="Override background filter threshold (default: from config, usually 0.4)")
+    parser.add_argument("--conf-threshold", type=float, default=None,
+                        help="Override confidence threshold (default: from config, usually 0.6)")
+    parser.add_argument("--voter-window", type=int, default=None,
+                        help="Override voter window size (default: from config, usually 3)")
     args = parser.parse_args()
 
     if not args.port and not args.stdin:
@@ -307,8 +309,14 @@ def main():
             f"model_config.pkl not found in {model_dir}. "
             "Cannot determine classnames.")
 
+    if args.bg_threshold is not None:
+        cfg.BACKGROUND_THRESHOLD = args.bg_threshold
+    if args.conf_threshold is not None:
+        cfg.CONFIDENCE_THRESHOLD = args.conf_threshold
+    if args.voter_window is not None:
+        cfg.VOTER_WINDOW_SIZE = args.voter_window
+
     extractor = MelExtractor(cfg)
-    voter = RealTimeVoter(classnames=classnames, cfg=cfg)
 
     print(f"  Classes     : {classnames}")
     print(f"  Input shape : {extractor.input_shape}")
@@ -328,7 +336,6 @@ def main():
         source=source,
         model=model,
         extractor=extractor,
-        voter=voter,
         classnames=classnames,
         submit_url=args.url,
         key=args.key,
